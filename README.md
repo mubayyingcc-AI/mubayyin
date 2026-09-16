@@ -10,7 +10,7 @@ AISystem  →  ScenarioCase[]  →  TrialResult[]  →  ReleaseRecord
 
 ```bash
 python3 demo.py          # end-to-end run, prints a real Release Record
-python3 -m unittest tests.test_engine -v   # 7 tests, all passing
+python3 -m unittest tests.test_engine -v   # 13 tests, all passing
 ```
 
 Both use **zero external dependencies** — pure Python 3 standard library —
