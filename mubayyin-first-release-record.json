@@ -1,0 +1,22 @@
+{
+  "record_id": "mrr_a8aad8965020",
+  "system_id": "demo-arabic-support-001",
+  "system_config_hash": "6d5df68bc08e85a8758cee2f9ed2f8c80105f4cd79c63efff93bd37f25059f87",
+  "scenario_set_version": "v1",
+  "total_scenarios": 2,
+  "critical_failures": 0,
+  "major_failures": 1,
+  "minor_failures": 1,
+  "status": "conditional_serve",
+  "conditions": [
+    "Release requires human sign-off due to unresolved major-severity findings."
+  ],
+  "reason_codes": [
+    "MAJOR_FAILURES_WITHIN_THRESHOLD",
+    "HUMAN_SIGNOFF_REQUIRED"
+  ],
+  "approver": "Value Seam",
+  "evidence_hash": "ad9fc0aa91f2f6e91f66c19358f8928899d4036f2878c5acd6ad1cbeee278b20",
+  "previous_record_hash": null,
+  "created_at": 1789599382.088052
+}
