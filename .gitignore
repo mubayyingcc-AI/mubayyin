@@ -10,3 +10,8 @@ venv/
 *.egg-info/
 mubayyin-first-release-record.json
 mubayyin-corrected-privacy-release.json
+
+# Editor temporary files
+*.swp
+*.swo
+*~
