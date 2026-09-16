@@ -8,3 +8,5 @@ venv/
 .DS_Store
 .pytest_cache/
 *.egg-info/
+mubayyin-first-release-record.json
+mubayyin-corrected-privacy-release.json
