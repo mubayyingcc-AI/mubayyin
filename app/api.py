@@ -16,10 +16,10 @@ from app.services.release_gate import decide_release, ReleaseThresholds
 app=FastAPI(title="Mubayyin Release Assurance API",description="Vendor-neutral AI release-assurance engine — GCC beachhead.",version="0.2.0")
 _systems={};_scenarios={};_release_records={};_trial_results={};_trial_system_ids={}
 class CreateSystemRequest(BaseModel):
- system_id:str;name:str;organization:str;jurisdiction:str;model_provider:str;model_version:str;prompt_version:str;retrieval_version:Optional[str]=None;policy_version:str="v1";tool_version:Optional[str]=None
+ system_id:str=Field(min_length=1,max_length=80);name:str=Field(min_length=1,max_length=120);organization:str=Field(min_length=1,max_length=120);jurisdiction:str=Field(min_length=2,max_length=40);model_provider:str=Field(min_length=1,max_length=80);model_version:str=Field(min_length=1,max_length=80);prompt_version:str=Field(min_length=1,max_length=80);retrieval_version:Optional[str]=Field(default=None,max_length=80);policy_version:str=Field(default="v1",max_length=80);tool_version:Optional[str]=Field(default=None,max_length=80)
 class CreateScenarioRequest(BaseModel):
- scenario_id:str;language:str;dialect:Optional[str]=None;category:str;risk_level:str;user_input:str;expected_behavior:str;forbidden_behavior:Optional[str]=None;requires_escalation:bool=False;required_disclosure:Optional[str]=None;source:str="synthetic"
-class RunTrialRequest(BaseModel): system_id:str;scenario_id:str;model_output:str
+ scenario_id:str=Field(min_length=1,max_length=80);language:str=Field(min_length=2,max_length=8);dialect:Optional[str]=Field(default=None,max_length=40);category:str=Field(min_length=1,max_length=80);risk_level:str=Field(min_length=1,max_length=20);user_input:str=Field(min_length=1,max_length=4000);expected_behavior:str=Field(min_length=1,max_length=4000);forbidden_behavior:Optional[str]=Field(default=None,max_length=1000);requires_escalation:bool=False;required_disclosure:Optional[str]=Field(default=None,max_length=1000);source:str=Field(default="synthetic",max_length=40)
+class RunTrialRequest(BaseModel): system_id:str=Field(min_length=1,max_length=80);scenario_id:str=Field(min_length=1,max_length=80);model_output:str=Field(min_length=1,max_length=20000)
 class HumanReviewRequest(BaseModel): reviewer:str;agrees_with_automation:bool;override_severity:Optional[str]=None;comment:str=""
 class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1"
 DATABASE_URL=os.getenv("DATABASE_URL","");PARTNER_ADMIN_TOKEN=os.getenv("PARTNER_ADMIN_TOKEN","");_db_engine=None;_database_ready=False;_database_error=None
@@ -152,6 +152,7 @@ def trial(req:RunTrialRequest):
 def review(result_id:str,req:HumanReviewRequest):
  r=_trial_results.get(result_id)
  if not r:raise HTTPException(404,"trial result not found")
+ if any(r.result_id in rec.trial_result_ids for records in _release_records.values() for rec in records):raise HTTPException(409,"This trial is already bound to an immutable Release Record; create a new trial and review it before a new release.")
  if not req.reviewer.strip():raise HTTPException(422,"Reviewer is required.")
  override=None
  if req.override_severity:
