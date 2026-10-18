@@ -1,8 +1,8 @@
 """
-Mubayyin HTTP API — verified core engine plus the public test-lab website.
-The current API stores records in memory; do not submit confidential or
-production customer data until persistence, access controls, and tenant
-isolation have been implemented and reviewed.
+Mubayyin HTTP API — sandbox release-assurance engine and public test lab.
+Durable evidence storage is enabled when DATABASE_URL is configured, but
+authentication and tenant isolation are not yet implemented. Do not submit
+confidential or production customer data.
 """
 from __future__ import annotations
 
@@ -36,6 +36,8 @@ _systems: dict[str, AISystem] = {}
 _scenarios: dict[str, ScenarioCase] = {}
 _release_records: dict[str, list] = {}
 _trial_results: dict[str, object] = {}
+# Explicit provenance prevents results from one system being reused for another.
+_trial_system_ids: dict[str, str] = {}
 
 # --- request/response schemas -------------------------------------------------
 class CreateSystemRequest(BaseModel):
@@ -236,6 +238,7 @@ def _restore_evidence_records() -> None:
                 payload["judge_scores"] = [JudgeScore(**{**x, "severity": Severity(x["severity"])}) for x in payload.get("judge_scores", [])]
                 payload["final_severity"] = Severity(payload["final_severity"])
                 _trial_results[row["record_id"]] = TrialResult(**payload)
+                _trial_system_ids[row["record_id"]] = row["system_id"]
             elif kind == "release":
                 payload["status"] = ReleaseStatus(payload["status"])
                 record = ReleaseRecord(**payload)
@@ -430,6 +433,7 @@ def run_trial_endpoint(req: RunTrialRequest):
     result.system_config_hash = system.config_hash()
     durable = _persist_evidence("trial", result.result_id, system.system_id, result)
     _trial_results[result.result_id] = result
+    _trial_system_ids[result.result_id] = system.system_id
     return {
         "result_id": result.result_id,
         "final_severity": result.final_severity.value,
@@ -464,7 +468,9 @@ def add_human_review(result_id: str, req: HumanReviewRequest):
         override_severity=Severity(req.override_severity) if req.override_severity else None,
         comment=req.comment,
     )
-    system_id = next((sid for sid, system in _systems.items() if system.config_hash() == result.system_config_hash), "unknown-system")
+    system_id = _trial_system_ids.get(result_id)
+    if not system_id:
+        raise HTTPException(status_code=409, detail="Trial provenance is missing; this result cannot be safely updated.")
     durable = _persist_evidence("trial", result.result_id, system_id, result)
     return {"result_id": result_id, "reviewed": True, "persistence": "durable" if durable else "memory_only"}
 
@@ -475,9 +481,20 @@ def create_release(req: DecideReleaseRequest):
     if not system:
         raise HTTPException(status_code=404, detail="system not found")
 
-    results = [_trial_results[rid] for rid in req.result_ids if rid in _trial_results]
-    if not results:
-        raise HTTPException(status_code=400, detail="no valid trial results provided")
+    if not req.result_ids:
+        raise HTTPException(status_code=400, detail="at least one trial result is required")
+    if len(req.result_ids) != len(set(req.result_ids)):
+        raise HTTPException(status_code=422, detail="duplicate trial result IDs are not allowed")
+    missing_ids = [rid for rid in req.result_ids if rid not in _trial_results]
+    if missing_ids:
+        raise HTTPException(status_code=404, detail="one or more trial results were not found; no release record was created")
+
+    results = [_trial_results[rid] for rid in req.result_ids]
+    for result in results:
+        if _trial_system_ids.get(result.result_id) != req.system_id:
+            raise HTTPException(status_code=409, detail="trial provenance mismatch: every result must belong to the requested AI system")
+        if result.system_config_hash != system.config_hash():
+            raise HTTPException(status_code=409, detail="stale evidence: the AI system configuration changed after this trial. Rerun affected scenarios before creating a release record.")
 
     history = _release_records.setdefault(req.system_id, [])
     previous_hash = history[-1].evidence_hash if history else None
