@@ -37,7 +37,7 @@ uvicorn app.api:app --reload
 
 This wraps the tested `app/models` and `app/services` code in a FastAPI API. The public sandbox uses a session-scoped cookie and keeps test artifacts in memory only; submitted test text is not persisted. A separate invited-pilot `/tenant/*` API now supports bearer-key authentication, tenant-scoped PostgreSQL evidence, immutable Release Records, human review, key rotation/revocation and durable evidence export. Tenant keys are stored as SHA-256 hashes. PostgreSQL is also used for consented partnership enquiries and opt-in anonymous usage events. The private tenant API still requires a real Railway create → restart → retrieve test before its durability is advertised as production-verified.
 
-Private pilot API details and security limits: [docs/private-tenant-workspace.md](docs/private-tenant-workspace.md).
+Private pilot API, browser workspace (`/workspace`) and security limits: [docs/private-tenant-workspace.md](docs/private-tenant-workspace.md).
 
 ## Portable Release Record export and verification
 
@@ -59,7 +59,7 @@ The tenant API is an initial controlled-pilot surface, not a finished enterprise
   `app/services/evaluator.py::reference_judge` — replace with an actual
   model call behind the same `JudgeFn` signature, and add a second,
   independent judge before trusting disagreement checks)
-- User-level roles, SSO/MFA, fine-grained reviewer permissions, rate limiting, a self-service private workspace UI, CI/CD webhooks, drift watch and SDKs
+- User-level roles, SSO/MFA, fine-grained reviewer permissions, rate limiting, a production-hardened private workspace UI, CI/CD webhooks, drift watch and SDKs
 - Any of the "10 organizations use this scenario library" scale — this
   scaffold ships with 10 illustrative scenarios, not a production library
 
