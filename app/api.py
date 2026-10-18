@@ -15,6 +15,14 @@ from app.services.evaluator import run_trial
 from app.services.release_gate import decide_release, ReleaseThresholds
 from app.services.attestation import create_release_bundle, verify_release_bundle
 app=FastAPI(title="Mubayyin Release Assurance API",description="Vendor-neutral AI release-assurance engine — GCC beachhead.",version="0.2.0")
+@app.middleware("http")
+async def prevent_sensitive_response_caching(request:Request,call_next):
+ response=await call_next(request)
+ path=request.url.path
+ if path.startswith("/tenant/") or path.startswith("/admin/tenants") or path.endswith("/export"):
+  response.headers["Cache-Control"]="no-store, private"
+  response.headers["Pragma"]="no-cache"
+ return response
 _systems={};_scenarios={};_release_records={};_trial_results={};_trial_system_ids={};_system_sessions={};_scenario_sessions={};_trial_sessions={};_release_sessions={};_session_last_seen={};_last_session_prune=0
 class CreateSystemRequest(BaseModel):
  system_id:str=Field(min_length=1,max_length=80);name:str=Field(min_length=1,max_length=120);organization:str=Field(min_length=1,max_length=120);jurisdiction:str=Field(min_length=2,max_length=40);model_provider:str=Field(min_length=1,max_length=80);model_version:str=Field(min_length=1,max_length=80);prompt_version:str=Field(min_length=1,max_length=80);retrieval_version:Optional[str]=Field(default=None,max_length=80);policy_version:str=Field(default="v1",max_length=80);tool_version:Optional[str]=Field(default=None,max_length=80)
