@@ -81,6 +81,9 @@ def _initialize_storage():
    c.execute(text("CREATE INDEX IF NOT EXISTS idx_partner_created ON mubayyin_partner_enquiries(created_at DESC)"))
    c.execute(text("CREATE TABLE IF NOT EXISTS mubayyin_evidence_records (record_type VARCHAR(24) NOT NULL,record_id VARCHAR(80) NOT NULL,system_id VARCHAR(80) NOT NULL,payload TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(record_type,record_id))"))
    c.execute(text("CREATE TABLE IF NOT EXISTS mubayyin_usage_events (id BIGSERIAL PRIMARY KEY,visitor_id VARCHAR(36) NOT NULL,event_name VARCHAR(40) NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"))
+   c.execute(text("CREATE TABLE IF NOT EXISTS mubayyin_tenants (tenant_id VARCHAR(80) PRIMARY KEY,name VARCHAR(160) NOT NULL,token_hash VARCHAR(64) UNIQUE NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),revoked_at TIMESTAMPTZ)"))
+   c.execute(text("CREATE TABLE IF NOT EXISTS mubayyin_tenant_evidence_records (tenant_id VARCHAR(80) NOT NULL,record_type VARCHAR(24) NOT NULL,record_id VARCHAR(80) NOT NULL,system_id VARCHAR(80) NOT NULL,payload TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(tenant_id,record_type,record_id),FOREIGN KEY(tenant_id) REFERENCES mubayyin_tenants(tenant_id))"))
+   c.execute(text("CREATE INDEX IF NOT EXISTS idx_tenant_evidence_lookup ON mubayyin_tenant_evidence_records(tenant_id,system_id,record_type,created_at)"))
   _database_ready=True;_database_error=None
  except Exception as e:_database_ready=False;_database_error=type(e).__name__
 def _json_default(v):
