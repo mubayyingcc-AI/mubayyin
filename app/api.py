@@ -295,4 +295,4 @@ def get_release_history(system_id: str):
 
 @app.get("/health")
 def health():
-    return {"status": "ok" if _database_ready else "degraded", "version": app.version, "partner_storage": "ready" if _database_ready else "unavailable"}
+    return {"status": "ok", "version": app.version, "partner_storage": "ready" if _database_ready else "unavailable"}
