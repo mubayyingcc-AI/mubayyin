@@ -257,7 +257,22 @@ def export_release_record(record_id:str,request:Request):
   if record is not None:break
  if record is None or _release_sessions.get(record_id)!=sid:
   raise HTTPException(404,"Sandbox Release Record not found.")
- bundle=create_release_bundle(record.to_dict())
+ trial_evidence=[]
+ scenario_ids=set(record.required_scenario_ids)
+ for trial_id in record.trial_result_ids:
+  trial=_trial_results.get(trial_id)
+  if trial is None or _trial_sessions.get(trial_id)!=sid:
+   raise HTTPException(409,"The Release Record's trial evidence is no longer available in this sandbox session.")
+  scenario_ids.add(trial.scenario_id)
+  trial_evidence.append(asdict(trial))
+ scenario_evidence=[]
+ for scenario_id in sorted(scenario_ids):
+  scenario=_scenarios.get(scenario_id)
+  if scenario is None or _scenario_sessions.get(scenario_id)!=sid:
+   raise HTTPException(409,"A required scenario definition is no longer available in this sandbox session.")
+  scenario_evidence.append({**asdict(scenario),"scenario_config_hash":scenario.config_hash()})
+ evidence={"format":"mubayyin-trial-evidence.v1","trials":trial_evidence,"scenarios":scenario_evidence,"scope":"Includes scenario definitions and trial results referenced by this Release Record at export time."}
+ bundle=create_release_bundle(record.to_dict(),evidence=evidence)
  body=json.dumps(bundle,ensure_ascii=False,sort_keys=True,indent=2)
  return Response(content=body,media_type="application/json",headers={"Content-Disposition":f'attachment; filename="mubayyin-{record_id}.json"'})
 
