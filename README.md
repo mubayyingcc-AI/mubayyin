@@ -39,14 +39,14 @@ This wraps the tested `app/models` and `app/services` code in a FastAPI API (`/s
 
 ## Portable Release Record export and verification
 
-The English and Arabic labs can export a sandbox Release Record as a JSON bundle. The bundle includes a canonical SHA-256 payload hash and supports optional HMAC-SHA256 signing when `MUBAYYIN_ATTESTATION_KEY` is configured.
+The English and Arabic labs can export a sandbox Release Record as a JSON evidence bundle, including referenced scenario definitions and trial outputs/findings. The canonical SHA-256 payload hash covers both the record and included evidence; optional HMAC-SHA256 signing is available when `MUBAYYIN_ATTESTATION_KEY` is configured.
 
 - API export: `GET /releases/{record_id}/export` (owning sandbox session only)
 - API verification: `POST /releases/verify`
 - Offline verifier: `python scripts/verify_release_bundle.py <bundle.json>`
 - Details and interpretation limits: [docs/release-record-bundle.md](docs/release-record-bundle.md)
 
-An unsigned hash can detect changes but does not authenticate who created the record. HMAC is a shared-secret mechanism, not a public-key signature. A valid bundle does not certify AI safety or compliance, and the public sandbox's underlying evidence remains ephemeral.
+An unsigned hash can detect changes to the record and exported evidence but does not authenticate who created the bundle. HMAC is a shared-secret mechanism, not a public-key signature. A valid bundle does not certify AI safety or compliance, and the public sandbox's underlying evidence remains ephemeral.
 
 ## What is deliberately NOT built yet (and why)
 
