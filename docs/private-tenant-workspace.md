@@ -32,7 +32,7 @@ Use `Authorization: Bearer <tenant-api-key>` on every `/tenant/*` request:
 8. `GET /tenant/releases/{record_id}/export` — export the Release Record plus referenced scenario definitions and trial evidence as a verifiable JSON bundle.
 9. `POST /releases/verify` — verify the exported bundle's content hash and, when the HMAC key is configured, its signature.
 
-The interactive API docs are available at `/docs` on the deployed service; use its Authorize control to provide the tenant bearer token. Do not paste tenant keys into public screenshots, issue reports or browser scripts that may be shared.
+The browser interface is served at `/workspace`; it keeps the tenant key in the current tab's `sessionStorage`, sends it in Authorization headers, and provides forms for system setup, scenarios, trials, human review, Release Records and evidence export. Closing the tab clears that session-scoped key. The interactive API docs are also available at `/docs`; use its Authorize control to provide the tenant bearer token. Do not paste tenant keys into public screenshots, issue reports or browser scripts that may be shared.
 
 ## What the controls do—and do not—guarantee
 
