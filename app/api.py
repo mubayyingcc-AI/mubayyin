@@ -189,6 +189,23 @@ def partner_usage(authorization:Optional[str]=Header(default=None)):
  except SQLAlchemyError:raise HTTPException(503,"Usage summary could not be read.")
  return {"events":[dict(x) for x in events],"returning_visitors_on_multiple_days":int(returning),"definition":"Anonymous visitor IDs with opt-in events on two or more distinct days in the last 30 days."}
 
+@app.get("/releases/{baseline_record_id}/compare/{candidate_record_id}")
+def compare_releases(baseline_record_id:str,candidate_record_id:str):
+ records={rec.record_id:rec for history in _release_records.values() for rec in history}
+ baseline=records.get(baseline_record_id);candidate=records.get(candidate_record_id)
+ if not baseline or not candidate:raise HTTPException(404,"One or both Release Records were not found.")
+ if baseline.system_id!=candidate.system_id:raise HTTPException(409,"Release Records must belong to the same system identity.")
+ base_trials=set(baseline.trial_result_ids);candidate_trials=set(candidate.trial_result_ids)
+ base_missing=set(baseline.missing_scenario_ids);candidate_missing=set(candidate.missing_scenario_ids)
+ base_reasons=set(baseline.reason_codes);candidate_reasons=set(candidate.reason_codes)
+ changed=baseline.system_config_hash!=candidate.system_config_hash
+ return {
+  "system_id":baseline.system_id,
+  "baseline":{"record_id":baseline.record_id,"status":baseline.status.value,"system_config_hash":baseline.system_config_hash,"evidence_hash":baseline.evidence_hash,"scenario_set_version":baseline.scenario_set_version,"trial_result_ids":baseline.trial_result_ids,"required_scenario_ids":baseline.required_scenario_ids,"missing_scenario_ids":baseline.missing_scenario_ids,"reason_codes":baseline.reason_codes},
+  "candidate":{"record_id":candidate.record_id,"status":candidate.status.value,"system_config_hash":candidate.system_config_hash,"evidence_hash":candidate.evidence_hash,"scenario_set_version":candidate.scenario_set_version,"trial_result_ids":candidate.trial_result_ids,"required_scenario_ids":candidate.required_scenario_ids,"missing_scenario_ids":candidate.missing_scenario_ids,"reason_codes":candidate.reason_codes},
+  "comparison":{"configuration_changed":changed,"evidence_changed":baseline.evidence_hash!=candidate.evidence_hash,"release_status_changed":baseline.status!=candidate.status,"added_trial_result_ids":sorted(candidate_trials-base_trials),"removed_trial_result_ids":sorted(base_trials-candidate_trials),"newly_missing_scenario_ids":sorted(candidate_missing-base_missing),"coverage_gaps_resolved":sorted(base_missing-candidate_missing),"reason_codes_added":sorted(candidate_reasons-base_reasons),"reason_codes_removed":sorted(base_reasons-candidate_reasons),"interpretation":"Compare the evidence and conditions; a changed hash alone does not mean the candidate is safer. Review the underlying findings and human sign-off before using this comparison for a release decision."}
+ }
+
 @app.post("/releases")
 def release(req:DecideReleaseRequest):
  s=_systems.get(req.system_id)
