@@ -134,9 +134,7 @@ def _persist(kind,rid,sid,record,immutable=False):
 @app.on_event("startup")
 def startup():
  _initialize_storage()
- # Public sandbox records are intentionally ephemeral. Do not enable durable evidence restoration until tenant-scoped auth is implemented.
- if os.getenv("MUBAYYIN_EVIDENCE_PERSISTENCE_ENABLED","false").lower()=="true":
-  _restore_evidence_records()
+ # Public sandbox evidence is session-scoped and ephemeral. Durable evidence restoration stays disabled until tenant-scoped authentication and authorization exist.
 @app.get("/health",include_in_schema=False)
 def health():
  return JSONResponse({"status":"ok","service":"mubayyin-web","version":app.version,"database":"ready" if _database_ready else ("not_configured" if not DATABASE_URL else "unavailable")})
