@@ -110,10 +110,10 @@ def reference_judge(scenario: ScenarioCase, model_output: str) -> JudgeScore:
     return JudgeScore(
         judge_name="reference_overlap_stub",
         groundedness=round(overlap, 3),
-        policy_adherence=1.0,   # deterministic checks own policy adherence
-        language_quality=0.0,   # not measured by this lexical reference evaluator
-        escalation_quality=1.0,
-        privacy_behavior=1.0,
+        policy_adherence=None,  # reported through deterministic checks, not measured by this reference judge
+        language_quality=None,  # no Arabic-capable semantic judge is connected
+        escalation_quality=None,  # no semantic escalation judge is connected
+        privacy_behavior=None,  # no semantic privacy judge is connected
         severity=severity,
         reason=f"lexical overlap with expected_behavior = {overlap:.2f}",
     )
