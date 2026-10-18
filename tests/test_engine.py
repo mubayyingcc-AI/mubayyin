@@ -155,6 +155,19 @@ class TestReleaseGate(unittest.TestCase):
         )
         self.assertEqual(record.status, ReleaseStatus.SAFE_TO_SERVE)
 
+    def test_release_record_references_exact_trial_results(self):
+        scenario = ScenarioCase(scenario_id="evidence-reference", language="en", dialect=None, category="fees", risk_level="low", user_input="What is the fee?", expected_behavior="Give the approved fee schedule.")
+        result = run_trial(scenario, "The fee follows the published schedule.")
+        record = decide_release(self.system, [result], ReleaseThresholds(), approver="reviewer")
+        self.assertEqual(record.trial_result_ids, [result.result_id])
+
+    def test_release_evidence_hash_changes_when_output_changes(self):
+        scenario = ScenarioCase(scenario_id="evidence-hash", language="en", dialect=None, category="fees", risk_level="low", user_input="What is the fee?", expected_behavior="Give the approved fee schedule.")
+        first = run_trial(scenario, "The fee follows the published schedule.")
+        second = run_trial(scenario, "The fee is five percent.")
+        record_one = decide_release(self.system, [first], ReleaseThresholds(), approver="reviewer")
+        record_two = decide_release(self.system, [second], ReleaseThresholds(), approver="reviewer")
+        self.assertNotEqual(record_one.evidence_hash, record_two.evidence_hash)
     def test_config_hash_is_reproducible(self):
         h1 = self.system.config_hash()
         h2 = self.system.config_hash()
