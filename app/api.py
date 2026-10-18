@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.models.core import AISystem, ScenarioCase, HumanReview, Severity, DeterministicCheckResult, JudgeScore, TrialResult, ReleaseRecord, ReleaseStatus
 from app.services.evaluator import run_trial
 from app.services.release_gate import decide_release, ReleaseThresholds
+from app.services.attestation import create_release_bundle, verify_release_bundle
 app=FastAPI(title="Mubayyin Release Assurance API",description="Vendor-neutral AI release-assurance engine — GCC beachhead.",version="0.2.0")
 _systems={};_scenarios={};_release_records={};_trial_results={};_trial_system_ids={};_system_sessions={};_scenario_sessions={};_trial_sessions={};_release_sessions={};_session_last_seen={};_last_session_prune=0
 class CreateSystemRequest(BaseModel):
@@ -242,6 +243,28 @@ def partner_usage(authorization:Optional[str]=Header(default=None)):
    returning=c.execute(text("SELECT COUNT(*) FROM (SELECT visitor_id FROM mubayyin_usage_events WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY visitor_id HAVING COUNT(DISTINCT DATE(created_at)) >= 2) q")).scalar_one()
  except SQLAlchemyError:raise HTTPException(503,"Usage summary could not be read.")
  return {"events":[dict(x) for x in events],"returning_visitors_on_multiple_days":int(returning),"definition":"Anonymous visitor IDs with opt-in events on two or more distinct days in the last 30 days."}
+
+@app.get("/releases/{record_id}/export")
+def export_release_record(record_id:str,request:Request):
+ """Download a portable Release Record bundle from the caller's own sandbox session."""
+ sid=_require_sandbox_session(request)
+ record=None
+ for history in _release_records.values():
+  for candidate in history:
+   if candidate.record_id==record_id:
+    record=candidate
+    break
+  if record is not None:break
+ if record is None or _release_sessions.get(record_id)!=sid:
+  raise HTTPException(404,"Sandbox Release Record not found.")
+ bundle=create_release_bundle(record.to_dict())
+ body=json.dumps(bundle,ensure_ascii=False,sort_keys=True,indent=2)
+ return Response(content=body,media_type="application/json",headers={"Content-Disposition":f'attachment; filename="mubayyin-{record_id}.json"'})
+
+@app.post("/releases/verify")
+def verify_exported_release_bundle(bundle:dict):
+ """Verify an exported bundle's content hash and, when configured, HMAC signature."""
+ return verify_release_bundle(bundle)
 
 @app.get("/releases/{baseline_record_id}/compare/{candidate_record_id}")
 def compare_releases(baseline_record_id:str,candidate_record_id:str,request:Request):
