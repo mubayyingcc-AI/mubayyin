@@ -13,6 +13,7 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Mubayyin", response.text)
         self.assertIn("Release Assurance Test Lab", response.text)
+        self.assertIn("Download Release Record bundle", response.text)
         self.assertIn('id="partnerForm"', response.text)
         self.assertIn("Request free early access", response.text)
         self.assertIn('id="journeyPanel"', response.text)
@@ -208,6 +209,7 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertIn("/scenarios", response.text)
         self.assertIn("/trials", response.text)
         self.assertIn("/releases", response.text)
+        self.assertIn("تنزيل حزمة سجل الإطلاق", response.text)
 
     def test_readiness_endpoint_reports_storage_mode(self):
         response = self.client.get("/ready")
