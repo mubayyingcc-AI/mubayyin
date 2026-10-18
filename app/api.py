@@ -87,7 +87,7 @@ class DecideReleaseRequest(BaseModel):
     max_critical_failures: int = 0
     max_major_failures: int = 3
     scenario_set_version: str = "v1"
-
+    required_scenario_ids: list[str] = Field(default_factory=list)
 
 
 # --- persistent design-partner intake ----------------------------------------
@@ -494,6 +494,11 @@ def create_release(req: DecideReleaseRequest):
 
     if not req.result_ids:
         raise HTTPException(status_code=400, detail="at least one trial result is required")
+    if len(req.required_scenario_ids) != len(set(req.required_scenario_ids)):
+        raise HTTPException(status_code=422, detail="duplicate required scenario IDs are not allowed")
+    unknown_required = [sid for sid in req.required_scenario_ids if sid not in _scenarios]
+    if unknown_required:
+        raise HTTPException(status_code=404, detail="one or more required scenario IDs were not found")
     if len(req.result_ids) != len(set(req.result_ids)):
         raise HTTPException(status_code=422, detail="duplicate trial result IDs are not allowed")
     missing_ids = [rid for rid in req.result_ids if rid not in _trial_results]
@@ -524,6 +529,7 @@ def create_release(req: DecideReleaseRequest):
         approver=req.approver,
         previous_record_hash=previous_hash,
         scenario_set_version=req.scenario_set_version,
+        required_scenario_ids=req.required_scenario_ids,
     )
     durable = _persist_evidence("release", record.record_id, system.system_id, record, immutable=True)
     history.append(record)
