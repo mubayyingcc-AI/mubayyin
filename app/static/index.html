@@ -289,7 +289,7 @@ function renderResult(r){
  $('limits').textContent='Limitations: this test evaluates one supplied response using configured deterministic checks and a lexical-overlap reference evaluator, not an independent language model. It does not connect to your AI system, prove a real external action occurred, reliably understand semantic paraphrases or all Arabic dialect risks, or issue production release approval. “No failure detected” is not a safety certification. API records are held in process memory and may be lost on restart; do not submit sensitive or production data.';
  $('releaseRecord').style.display='none';$('releaseRecord').innerHTML='';
  $('releaseError').style.display='none';
- $('createRelease').disabled=false;
+ $('createRelease').disabled=!journeyState.steps[2];
  $('createRelease').textContent='Create sandbox release record';
  $('result').style.display='block';$('result').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
