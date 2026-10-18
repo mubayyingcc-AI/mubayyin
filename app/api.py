@@ -7,9 +7,10 @@ isolation have been implemented and reviewed.
 from __future__ import annotations
 
 from pathlib import Path
+import secrets
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import os
@@ -87,6 +88,7 @@ class DecideReleaseRequest(BaseModel):
 # --- persistent design-partner intake ----------------------------------------
 # This table stores only voluntary partnership enquiries, not test payloads.
 DATABASE_URL = os.getenv("DATABASE_URL", "")
+PARTNER_ADMIN_TOKEN = os.getenv("PARTNER_ADMIN_TOKEN", "")
 _db_engine = None
 _database_ready = False
 _database_error = None
@@ -191,6 +193,42 @@ def create_partner_enquiry(req: PartnerEnquiryRequest):
     except SQLAlchemyError:
         raise HTTPException(status_code=503, detail="We could not safely save this enquiry. No enquiry was confirmed; please retry later.")
     return {"accepted": True, "enquiry_id": enquiry_id, "message": "Your partnership enquiry was saved. Mubayyin is an early-access test lab; this is not a commercial commitment."}
+
+
+@app.get("/partner-inbox", include_in_schema=False)
+def partner_inbox_page():
+    response = FileResponse(Path(__file__).parent / "static" / "partner-inbox.html", media_type="text/html")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.get("/partnership/enquiries")
+def list_partner_enquiries(
+    authorization: Optional[str] = Header(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    if not PARTNER_ADMIN_TOKEN:
+        raise HTTPException(status_code=503, detail="Partner inbox access is not configured. Set PARTNER_ADMIN_TOKEN in the service environment.")
+    expected = "Bearer " + PARTNER_ADMIN_TOKEN
+    if not authorization or not secrets.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="Valid bearer token required.")
+    if not _database_ready or _db_engine is None:
+        raise HTTPException(status_code=503, detail="Partnership storage is unavailable.")
+    try:
+        with _db_engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT enquiry_id, name, email, organization, role, jurisdiction,
+                       workflow_type, current_problem, preferred_involvement, created_at
+                FROM mubayyin_partner_enquiries
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """), {"limit": limit}).mappings().all()
+        return {"enquiries": [
+            {**dict(row), "created_at": row["created_at"].isoformat() if row["created_at"] else None}
+            for row in rows
+        ]}
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="Could not retrieve enquiries from persistent storage.")
 
 @app.get("/", include_in_schema=False)
 def website():
