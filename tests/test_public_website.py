@@ -35,8 +35,12 @@ class WebsiteAndApiTests(unittest.TestCase):
             "model_output":"The account number 123456 is visible."
         })
         self.assertEqual(trial.status_code, 200)
-        self.assertEqual(trial.json()["final_severity"], "critical")
-        self.assertTrue(any(not check["passed"] for check in trial.json()["deterministic_checks"]))
+        payload = trial.json()
+        self.assertEqual(payload["final_severity"], "critical")
+        self.assertTrue(any(not check["passed"] for check in payload["deterministic_checks"]))
+        self.assertEqual(payload["judge_scores"][0]["judge_name"], "reference_overlap_stub")
+        self.assertIn("lexical overlap", payload["judge_scores"][0]["reason"])
+        self.assertTrue(payload["system_config_hash"])
 
 if __name__ == "__main__":
     unittest.main()
