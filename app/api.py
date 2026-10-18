@@ -89,7 +89,7 @@ def _persist(kind,rid,sid,record,immutable=False):
  except SQLAlchemyError:raise HTTPException(503,"Evidence storage failed; no durable record was confirmed.")
  return True
 @app.on_event("startup")
-def startup():_initialize_storage()
+def startup():\n _initialize_storage()\n _restore_evidence_records()
 @app.get("/health",include_in_schema=False)
 def health():
  return JSONResponse({"status":"ok","service":"mubayyin-web","version":app.version,"database":"ready" if _database_ready else ("not_configured" if not DATABASE_URL else "unavailable")})
@@ -145,6 +145,46 @@ def trial(req:RunTrialRequest):
  if not s or not sc:raise HTTPException(404,"system or scenario not found")
  r=run_trial(sc,req.model_output);r.system_config_hash=s.config_hash();r.scenario_config_hash=sc.config_hash();d=_persist("trial",r.result_id,s.system_id,r);_trial_results[r.result_id]=r
  return {"result_id":r.result_id,"final_severity":r.final_severity.value,"is_failure":r.is_failure(),"deterministic_checks":[c.__dict__ for c in r.deterministic_checks],"judge_scores":[{"judge_name":j.judge_name,"groundedness":j.groundedness,"policy_adherence":j.policy_adherence,"language_quality":j.language_quality,"escalation_quality":j.escalation_quality,"privacy_behavior":j.privacy_behavior,"severity":j.severity.value,"reason":j.reason} for j in r.judge_scores],"system_config_hash":r.system_config_hash,"scenario_config_hash":r.scenario_config_hash,"persistence":"durable" if d else "memory_only"}
+@app.post("/trials/{result_id}/review")
+def review(result_id:str,req:HumanReviewRequest):
+ r=_trial_results.get(result_id)
+ if not r:raise HTTPException(404,"trial result not found")
+ if not req.reviewer.strip():raise HTTPException(422,"Reviewer is required.")
+ override=None
+ if req.override_severity:
+  try:override=Severity(req.override_severity)
+  except ValueError:raise HTTPException(422,"Invalid override severity.")
+ r.human_review=HumanReview(reviewer=req.reviewer.strip(),agrees_with_automation=req.agrees_with_automation,override_severity=override,comment=req.comment.strip())
+ d=_persist("trial",r.result_id,next((sid for sid,s in _systems.items() if s.config_hash()==r.system_config_hash),""),r)
+ return {"result_id":r.result_id,"review_saved":True,"persistence":"durable" if d else "memory_only"}
+
+class UsageEventRequest(BaseModel):
+ visitor_id:str=Field(min_length=36,max_length=36)
+ event_name:str
+ EVENT_NAMES={"trial_completed","release_record_created","retest_completed","partner_enquiry_started","language_switched"}
+@app.post("/usage/events",status_code=202)
+def usage_event(req:UsageEventRequest):
+ if req.event_name not in UsageEventRequest.EVENT_NAMES:raise HTTPException(422,"Unknown usage event.")
+ try:uuid.UUID(req.visitor_id)
+ except ValueError:raise HTTPException(422,"visitor_id must be a UUID.")
+ if not _database_ready or _db_engine is None:return JSONResponse(status_code=202,content={"accepted":False,"reason":"storage_unavailable"})
+ try:
+  with _db_engine.begin() as c:c.execute(text("INSERT INTO mubayyin_usage_events(visitor_id,event_name) VALUES(:v,:e)"),{"v":req.visitor_id,"e":req.event_name})
+ except SQLAlchemyError:return JSONResponse(status_code=202,content={"accepted":False,"reason":"storage_unavailable"})
+ return JSONResponse(status_code=202,content={"accepted":True})
+
+@app.get("/partner-inbox/usage")
+def partner_usage(authorization:Optional[str]=Header(default=None)):
+ if not PARTNER_ADMIN_TOKEN:raise HTTPException(503,"Partner inbox access is not configured.")
+ if not authorization or not secrets.compare_digest(authorization,"Bearer "+PARTNER_ADMIN_TOKEN):raise HTTPException(401,"Valid bearer token required.")
+ if not _database_ready or _db_engine is None:raise HTTPException(503,"Usage storage is unavailable.")
+ try:
+  with _db_engine.connect() as c:
+   events=c.execute(text("SELECT event_name,COUNT(*) AS event_count,COUNT(DISTINCT visitor_id) AS unique_visitors FROM mubayyin_usage_events WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY event_name ORDER BY event_name")).mappings().all()
+   returning=c.execute(text("SELECT COUNT(*) FROM (SELECT visitor_id FROM mubayyin_usage_events WHERE created_at >= NOW() - INTERVAL '30 days' GROUP BY visitor_id HAVING COUNT(DISTINCT DATE(created_at)) >= 2) q")).scalar_one()
+ except SQLAlchemyError:raise HTTPException(503,"Usage summary could not be read.")
+ return {"events":[dict(x) for x in events],"returning_visitors_on_multiple_days":int(returning),"definition":"Anonymous visitor IDs with opt-in events on two or more distinct days in the last 30 days."}
+
 @app.post("/releases")
 def release(req:DecideReleaseRequest):
  s=_systems.get(req.system_id)
