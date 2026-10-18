@@ -31,7 +31,7 @@ def _prune_expired_sandbox_sessions():
  expired={sid for sid,last in _session_last_seen.items() if now-last>7200}
  for sid in expired:
   for key,owner in list(_system_sessions.items()):
-   if owner==sid:_system_sessions.pop(key,None);_systems.pop(key,None)
+   if owner==sid:_system_sessions.pop(key,None);_systems.pop(key,None);_release_records.pop(key,None)
   for key,owner in list(_scenario_sessions.items()):
    if owner==sid:_scenario_sessions.pop(key,None);_scenarios.pop(key,None)
   for key,owner in list(_trial_sessions.items()):
