@@ -218,7 +218,7 @@ def provision_tenant(req:TenantCreateRequest,authorization:Optional[str]=Header(
   with _db_engine.begin() as conn:
    conn.execute(text("INSERT INTO mubayyin_tenants(tenant_id,name,token_hash) VALUES(:t,:n,:h)"),{"t":tenant_id,"n":req.name.strip(),"h":token_hash})
  except SQLAlchemyError:raise HTTPException(503,"Tenant could not be provisioned.")
- return {"tenant_id":tenant_id,"name":req.name.strip(),"api_key":token,"key_storage":"sha256_hash_only","warning":"Copy this key now. It is shown only once. Store it in a secret manager; do not commit it or place it in public browser code."}
+ return JSONResponse(content={"tenant_id":tenant_id,"name":req.name.strip(),"api_key":token,"key_storage":"sha256_hash_only","warning":"Copy this key now. It is shown only once. Store it in a secret manager; do not commit it or place it in public browser code."},headers={"Cache-Control":"no-store","Pragma":"no-cache"})
 
 @app.post("/admin/tenants/{tenant_id}/rotate-key")
 def rotate_tenant_key(tenant_id:str,authorization:Optional[str]=Header(default=None)):
@@ -231,7 +231,7 @@ def rotate_tenant_key(tenant_id:str,authorization:Optional[str]=Header(default=N
    if result.rowcount!=1:raise HTTPException(404,"Active tenant not found.")
  except HTTPException:raise
  except SQLAlchemyError:raise HTTPException(503,"Tenant key could not be rotated.")
- return {"tenant_id":tenant_id,"api_key":token,"key_storage":"sha256_hash_only","warning":"The previous key is now invalid. Copy this key now; it is shown only once."}
+ return JSONResponse(content={"tenant_id":tenant_id,"api_key":token,"key_storage":"sha256_hash_only","warning":"The previous key is now invalid. Copy this key now; it is shown only once."},headers={"Cache-Control":"no-store","Pragma":"no-cache"})
 
 @app.post("/admin/tenants/{tenant_id}/revoke")
 def revoke_tenant(tenant_id:str,authorization:Optional[str]=Header(default=None)):
