@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>Mubayyin · Partner inbox</title>
+<style>
+:root{color-scheme:light;--navy:#071a2b;--teal:#36d6bd;--ink:#152e42;--muted:#607286;--line:#dce5ed;--paper:#f5f8fb}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:var(--navy);color:white;padding:22px 0}.wrap{width:min(1160px,calc(100% - 32px));margin:auto}.brand{font-weight:800;font-size:20px}.brand span{color:var(--teal)}header p{color:#b9c9d7;margin:6px 0 0;font-size:12px}
+main{padding:30px 0}.card{background:white;border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 8px 30px #0b2a4309}
+h1{font-size:24px;margin:0 0 6px;letter-spacing:-.03em}h2{font-size:16px;margin:0 0 10px}.muted{color:var(--muted);font-size:12px}
+form{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}input{min-width:220px;flex:1;padding:11px;border:1px solid #cfdae4;border-radius:8px;font:inherit}
+button,.button{border:0;border-radius:8px;padding:11px 15px;background:var(--navy);color:white;font-weight:750;cursor:pointer;text-decoration:none;font-size:12px}button:disabled{opacity:.55;cursor:wait}.secondary{background:#e5f8f3;color:#075f53}
+#status{font-size:12px;margin-top:12px;white-space:pre-wrap}.error{color:#982d2d}.ok{color:#126a4e}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.tablewrap{overflow:auto;margin-top:14px}table{width:100%;border-collapse:collapse;min-width:920px;font-size:12px}th,td{text-align:left;vertical-align:top;padding:11px;border-bottom:1px solid var(--line)}th{background:#f4f8fb;color:#52687b;font-size:10px;text-transform:uppercase;letter-spacing:.06em}td{max-width:280px;overflow-wrap:anywhere}a{color:#087c70}
+#results{display:none}.empty{padding:24px;text-align:center;color:var(--muted);font-size:12px}
+</style></head>
+<body>
+<header><div class="wrap"><div class="brand">م <span>Mubayyin</span> · Partner inbox</div><p>Private early-access enquiries · No contact details are displayed until the API accepts your token.</p></div></header>
+<main class="wrap">
+ <section class="card"><h1>Design-partner enquiries</h1><p class="muted">Enter the PARTNER_ADMIN_TOKEN configured in Railway. The token stays in this page's memory and is not saved to local storage. Use this only on a trusted device.</p>
+  <form id="authForm"><input id="token" type="password" required autocomplete="off" spellcheck="false" placeholder="Railway PARTNER_ADMIN_TOKEN" aria-label="Partner inbox access token"><button id="load" type="submit">Load enquiries</button></form>
+  <div id="status" role="status" aria-live="polite"></div>
+ </section>
+ <section class="card" id="results"><div class="toolbar"><div><h2>Saved enquiries</h2><div class="muted" id="count"></div></div><div><button class="secondary" id="refresh" type="button">Refresh</button> <button id="export" type="button">Export CSV</button></div></div>
+  <div class="tablewrap"><table><thead><tr><th>Received</th><th>Contact</th><th>Organization / role</th><th>Market / workflow</th><th>Contribution</th><th>Problem to test</th><th>Reference</th></tr></thead><tbody id="rows"></tbody></table></div><div class="empty" id="empty" style="display:none">No enquiries saved yet.</div>
+ </section>
+ <p class="muted">Security: do not share this token or the inbox URL with prospective partners. Rotate the token in Railway if you think it has been exposed. Submitted details are confidential contact information; use them only for the purpose consented to on the form.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);let authToken='';let currentRows=[];
+function node(tag,txt){const el=document.createElement(tag);el.textContent=txt==null?'':String(txt);return el}
+function status(message,isError=false){$('status').textContent=message;$('status').className=isError?'error':'ok'}
+async function loadRows(){
+ const btn=$('load');btn.disabled=true;$('refresh').disabled=true;$('export').disabled=true;
+ status('Checking access and loading saved enquiries…');
+ try{
+  const response=await fetch('/partnership/enquiries?limit=200',{headers:{Authorization:'Bearer '+authToken},cache:'no-store'});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Could not load enquiries ('+response.status+').');
+  currentRows=Array.isArray(data.enquiries)?data.enquiries:[];
+  const tbody=$('rows');tbody.replaceChildren();
+  for(const item of currentRows){
+   const tr=node('tr');
+   const received=node('td',item.created_at?new Date(item.created_at).toLocaleString():'');
+   const contact=node('td');const name=node('strong',item.name);const email=node('div');const link=node('a',item.email);link.href='mailto:'+encodeURIComponent(item.email);email.append(link);contact.append(name,email);
+   const org=node('td');org.append(node('strong',item.organization),node('div',item.role));
+   const market=node('td');market.append(node('div',item.jurisdiction),node('div',item.workflow_type));
+   const contribution=node('td',String(item.preferred_involvement||'').replaceAll('_',' '));
+   const problem=node('td',item.current_problem);const ref=node('td',item.enquiry_id);
+   [received,contact,org,market,contribution,problem,ref].forEach(td=>tr.append(td));tbody.append(tr);
+  }
+  $('count').textContent=currentRows.length+' saved enquiry/enquiries (maximum 200 shown)';
+  $('empty').style.display=currentRows.length?'none':'block';$('results').style.display='block';
+  $('export').disabled=currentRows.length===0;status('Access verified. Enquiries loaded from persistent storage.');
+ }catch(err){$('results').style.display='none';status(err.message||'Unable to load enquiries.',true)}
+ finally{btn.disabled=false;$('refresh').disabled=false}
+}
+$('authForm').addEventListener('submit',async e=>{e.preventDefault();authToken=$('token').value.trim();if(authToken)await loadRows()});
+$('refresh').addEventListener('click',loadRows);
+$('export').addEventListener('click',()=>{
+ const columns=['created_at','enquiry_id','name','email','organization','role','jurisdiction','workflow_type','preferred_involvement','current_problem'];
+ const safe=v=>{let s=String(v??'').replace(/\r?\n/g,' ');if(/^[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
+ const csv=[columns.join(','),...currentRows.map(r=>columns.map(k=>safe(r[k])).join(','))].join('\r\n');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));const a=node('a','download');a.href=url;a.download='mubayyin-partner-enquiries.csv';a.click();URL.revokeObjectURL(url);
+});
+</script></body></html>
