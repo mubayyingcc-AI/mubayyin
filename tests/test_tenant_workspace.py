@@ -140,6 +140,14 @@ class DurableTenantWorkspaceTests(unittest.TestCase):
         denied = self.client.post("/admin/tenants", json={"name": "No Auth"})
         self.assertEqual(denied.status_code, 401)
         tenant = self._provision("Rotation Test")
+        with self.engine.connect() as conn:
+            stored_hash = conn.execute(
+                text("SELECT token_hash FROM mubayyin_tenants WHERE tenant_id=:t"),
+                {"t": tenant["tenant_id"]},
+            ).scalar_one()
+        import hashlib
+        self.assertEqual(stored_hash, hashlib.sha256(tenant["api_key"].encode("utf-8")).hexdigest())
+        self.assertNotEqual(stored_hash, tenant["api_key"])
         old_headers = {"Authorization": "Bearer " + tenant["api_key"]}
         rotated = self.client.post(
             f'/admin/tenants/{tenant["tenant_id"]}/rotate-key',
