@@ -11,11 +11,42 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Mubayyin", response.text)
         self.assertIn("Release Assurance Test Lab", response.text)
+        self.assertIn('id="partnerForm"', response.text)
+        self.assertIn("Request free early access", response.text)
 
     def test_health_endpoint(self):
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
+
+
+    def _partner_payload(self):
+        return {
+            "name": "Test Evaluator",
+            "email": "evaluator@example.com",
+            "organization": "Example Research Lab",
+            "role": "AI Engineer",
+            "jurisdiction": "Global / multiple markets",
+            "workflow_type": "AI evaluation / research",
+            "current_problem": "We need to verify whether our assistant follows required disclosure rules.",
+            "preferred_involvement": "technical_evaluator",
+            "consent_to_contact": True,
+            "website": ""
+        }
+
+    def test_partner_enquiry_requires_contact_consent(self):
+        payload = self._partner_payload()
+        payload["consent_to_contact"] = False
+        response = self.client.post("/partnership/enquiries", json=payload)
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("consent", response.json()["detail"].lower())
+
+    def test_partner_enquiry_rejects_invalid_email(self):
+        payload = self._partner_payload()
+        payload["email"] = "not-an-email"
+        response = self.client.post("/partnership/enquiries", json=payload)
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("email", response.json()["detail"].lower())
 
     def test_trial_flow_flags_forbidden_phrase(self):
         system = self.client.post("/systems", json={
