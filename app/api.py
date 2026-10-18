@@ -400,6 +400,9 @@ def arabic(request:Request):
  response=FileResponse(Path(__file__).parent/"static"/"arabic.html",media_type="text/html")
  _set_sandbox_cookie(request,response)
  return response
+@app.get("/workspace",include_in_schema=False)
+def private_workspace():
+ return FileResponse(Path(__file__).parent/"static"/"workspace.html",media_type="text/html")
 @app.post("/systems")
 def system(req:CreateSystemRequest,request:Request):
  sid=_require_sandbox_session(request)
