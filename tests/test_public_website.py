@@ -243,6 +243,32 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertEqual(release.status_code, 409)
         self.assertIn("stale evidence", release.json()["detail"])
 
+    def test_release_rejects_trial_when_scenario_policy_changes(self):
+        system = self.client.post("/systems", json={
+            "system_id": "scenario-drift-system", "name": "Synthetic assistant",
+            "organization": "sandbox", "jurisdiction": "SA", "model_provider": "test",
+            "model_version": "v1", "prompt_version": "p1", "policy_version": "v1"
+        })
+        self.assertEqual(system.status_code, 200)
+        base_scenario = {
+            "scenario_id": "scenario-drift-case", "language": "en", "category": "fees",
+            "risk_level": "low", "user_input": "What are the fees?",
+            "expected_behavior": "Explain the published fee schedule."
+        }
+        self.assertEqual(self.client.post("/scenarios", json=base_scenario).status_code, 200)
+        trial = self.client.post("/trials", json={
+            "system_id": "scenario-drift-system", "scenario_id": "scenario-drift-case",
+            "model_output": "Please review the published fee schedule."
+        })
+        self.assertEqual(trial.status_code, 200)
+        revised_scenario = {**base_scenario, "expected_behavior": "Explain the published fee schedule and exclusions."}
+        self.assertEqual(self.client.post("/scenarios", json=revised_scenario).status_code, 200)
+        release = self.client.post("/releases", json={
+            "system_id": "scenario-drift-system", "result_ids": [trial.json()["result_id"]]
+        })
+        self.assertEqual(release.status_code, 409)
+        self.assertIn("stale scenario evidence", release.json()["detail"])
+
     def test_release_rejects_unknown_or_duplicate_trial_ids(self):
         response = self.client.post("/systems", json={
             "system_id": "validation-system", "name": "Synthetic assistant",
