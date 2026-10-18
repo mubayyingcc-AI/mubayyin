@@ -89,7 +89,9 @@ def _persist(kind,rid,sid,record,immutable=False):
  except SQLAlchemyError:raise HTTPException(503,"Evidence storage failed; no durable record was confirmed.")
  return True
 @app.on_event("startup")
-def startup():\n _initialize_storage()\n _restore_evidence_records()
+def startup():
+ _initialize_storage()
+ _restore_evidence_records()
 @app.get("/health",include_in_schema=False)
 def health():
  return JSONResponse({"status":"ok","service":"mubayyin-web","version":app.version,"database":"ready" if _database_ready else ("not_configured" if not DATABASE_URL else "unavailable")})
