@@ -46,16 +46,35 @@ class ReleaseThresholds:
 
 
 def _evidence_hash(system: AISystem, results: list[TrialResult]) -> str:
-    payload = json.dumps(
-        {
-            "system_config_hash": system.config_hash(),
-            "result_ids": sorted(r.result_id for r in results),
-            "severities": sorted(r.final_severity.value for r in results),
-        },
-        sort_keys=True,
-    )
-    return hashlib.sha256(payload.encode()).hexdigest()
-
+    """Bind the release to exact outputs, configured checks, and human review."""
+    evidence = []
+    for result in sorted(results, key=lambda item: item.result_id):
+        evidence.append({
+            "result_id": result.result_id,
+            "scenario_id": result.scenario_id,
+            "output_sha256": hashlib.sha256(result.model_output.encode("utf-8")).hexdigest(),
+            "final_severity": result.final_severity.value,
+            "deterministic_checks": [{"passed": check.passed, "rule": check.rule, "detail": check.detail} for check in result.deterministic_checks],
+            "judge_scores": [{
+                "judge_name": score.judge_name,
+                "groundedness": score.groundedness,
+                "policy_adherence": score.policy_adherence,
+                "language_quality": score.language_quality,
+                "escalation_quality": score.escalation_quality,
+                "privacy_behavior": score.privacy_behavior,
+                "severity": score.severity.value,
+                "reason": score.reason,
+            } for score in result.judge_scores],
+            "human_review": None if result.human_review is None else {
+                "reviewer": result.human_review.reviewer,
+                "agrees_with_automation": result.human_review.agrees_with_automation,
+                "override_severity": result.human_review.override_severity.value if result.human_review.override_severity else None,
+                "comment": result.human_review.comment,
+                "reviewed_at": result.human_review.reviewed_at,
+            },
+        })
+    payload = json.dumps({"system_config_hash": system.config_hash(), "trial_evidence": evidence}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 def decide_release(
     system: AISystem,
@@ -116,5 +135,6 @@ def decide_release(
         approver=approver,
         evidence_hash=_evidence_hash(system, results),
         previous_record_hash=previous_record_hash,
+        trial_result_ids=sorted(r.result_id for r in results),
     )
     return record
