@@ -311,7 +311,8 @@ def tenant_create_release(req:DecideReleaseRequest,authorization:Optional[str]=H
   trials.append(trial)
  if not trials:raise HTTPException(400,"No valid trial results provided.")
  previous_records=[rec for _,_,rec in _tenant_list(tenant_id,"release",req.system_id)]
- previous_hash=previous_records[-1].evidence_hash if previous_records else None
+ previous_record=max(previous_records,key=lambda rec:rec.created_at) if previous_records else None
+ previous_hash=previous_record.evidence_hash if previous_record else None
  record=decide_release(system,trials,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,previous_hash,req.scenario_set_version,req.required_scenario_ids)
  _tenant_store(tenant_id,"release",record.record_id,system.system_id,record,immutable=True)
  payload=record.to_dict();payload["persistence"]="durable";payload["tenant_id"]=tenant_id
