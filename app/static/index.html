@@ -190,8 +190,9 @@ function renderJourney(){
  $('journeyCount').textContent=done+' / 4';
  $('journeyProgress').style.width=(done/4*100)+'%';
  [1,2,3,4].forEach(n=>{const el=$('step'+n);if(!el)return;el.classList.toggle('done',!!journeyState.steps[n]);el.querySelector('b').textContent=journeyState.steps[n]?'✓':'○'});
- $('journeyRetest').disabled=!lastResult;
+ $('journeyRetest').disabled=!lastResult||!journeyState.steps[2]||!journeyState.steps[3];
  $('reviewEvidence').disabled=!lastResult||!!journeyState.steps[2];
+ $('createRelease').disabled=!lastResult||!journeyState.steps[2]||!!lastResult.releaseRecord;
  if(done===4){$('journeyMessage').textContent='Journey complete. You now have a baseline, reviewed evidence, a release record, and a retest. Start another scenario when you are ready.';if(!journeyState.completionTracked){journeyState.completionTracked=true;saveJourney();trackEvent('journey_completed')}}
  else if(lastResult&&lastResult.checks&&lastResult.checks.some(x=>!x.passed))$('journeyMessage').textContent='Next: inspect each flagged check. Change the response or scenario only if you can justify the change, then rerun it to see whether the evidence changes.';
  else if(lastResult)$('journeyMessage').textContent='Next: review the configured checks and their limitations, then create a sandbox release record before retesting.';
@@ -226,6 +227,7 @@ $('testForm').addEventListener('submit',async e=>{
  e.preventDefault();hideError();
  const output=$('output').value.trim(), expected=$('expected').value.trim();
  if(!output||!expected){showError('Please provide the expected behaviour and the AI response to test.');return}
+ if(!journeyState.isRetest&&journeyState.steps[1]){journeyState.steps={};journeyState.baseline=null;journeyState.completionTracked=false;saveJourney();renderJourney()}
  $('runBtn').disabled=true;$('loading').style.display='block';$('result').style.display='none';trackEvent('lab_started');
  try{
   const systemId=uuid('sandbox');
@@ -345,6 +347,7 @@ $('partnerForm').addEventListener('submit',async e=>{
 $('reviewEvidence').addEventListener('click',()=>{
  if(!lastResult)return;
  markJourneyStep(2);
+ $('journeyMessage').textContent='Evidence review recorded. You can now create the release record.';
  $('journeyMessage').textContent='Evidence review recorded in this browser. Check the rule details and limitations above before deciding what to change.';
 
 });
