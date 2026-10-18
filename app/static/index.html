@@ -173,7 +173,7 @@ function loadJourney(){
  try{const s=JSON.parse(localStorage.getItem(JOURNEY_KEY)||'{}');journeyState={...journeyState,...s,steps:s.steps||{},history:Array.isArray(s.history)?s.history:[]}}
  catch{journeyState={steps:{},history:[],baseline:null,isRetest:false}}
 }
-function saveJourney(){try{localStorage.setItem(JOURNEY_KEY,JSON.stringify({steps:journeyState.steps,history:journeyState.history.slice(-25),baseline:journeyState.baseline}))}catch{}}
+function saveJourney(){try{localStorage.setItem(JOURNEY_KEY,JSON.stringify({steps:journeyState.steps,history:journeyState.history.slice(-25),baseline:journeyState.baseline,completionTracked:!!journeyState.completionTracked}))}catch{}}
 function visitorId(){
  try{let id=localStorage.getItem(VISITOR_KEY);if(!id){id=crypto.randomUUID();localStorage.setItem(VISITOR_KEY,id)}return id}catch{return null}
 }
@@ -192,7 +192,7 @@ function renderJourney(){
  [1,2,3,4].forEach(n=>{const el=$('step'+n);if(!el)return;el.classList.toggle('done',!!journeyState.steps[n]);el.querySelector('b').textContent=journeyState.steps[n]?'✓':'○'});
  $('journeyRetest').disabled=!lastResult;
  $('reviewEvidence').disabled=!lastResult||!!journeyState.steps[2];
- if(done===4)$('journeyMessage').textContent='Journey complete. You now have a baseline, reviewed evidence, a release record, and a retest. Start another scenario when you are ready.';
+ if(done===4){$('journeyMessage').textContent='Journey complete. You now have a baseline, reviewed evidence, a release record, and a retest. Start another scenario when you are ready.';if(!journeyState.completionTracked){journeyState.completionTracked=true;saveJourney();trackEvent('journey_completed')}}
  else if(lastResult&&lastResult.checks&&lastResult.checks.some(x=>!x.passed))$('journeyMessage').textContent='Next: inspect each flagged check. Change the response or scenario only if you can justify the change, then rerun it to see whether the evidence changes.';
  else if(lastResult)$('journeyMessage').textContent='Next: review the configured checks and their limitations, then create a sandbox release record before retesting.';
 }
@@ -319,6 +319,8 @@ $('createRelease').addEventListener('click',async()=>{
   button.disabled=false;button.textContent='Retry release record';
  }
 });
+let partnerFormStarted=false;
+$('partnerForm').addEventListener('focusin',()=>{if(!partnerFormStarted){partnerFormStarted=true;trackEvent('partner_form_started')}},{once:true});
 $('partnerForm').addEventListener('submit',async e=>{
  e.preventDefault();
  const err=$('partnerError'),success=$('partnerSuccess'),button=$('partnerSubmit');
@@ -335,7 +337,7 @@ $('partnerForm').addEventListener('submit',async e=>{
   const data=await response.json();
   if(!response.ok)throw new Error(data.detail||'The enquiry could not be saved. Please try again later.');
   success.textContent='Thank you. Your enquiry has been received'+(data.enquiry_id&&data.enquiry_id!=='received'?' (reference: '+data.enquiry_id+')':'')+'. We will review it for early-access collaboration.';
-  success.style.display='block';$('partnerForm').reset();
+  success.style.display='block';trackEvent('partner_form_submitted');$('partnerForm').reset();partnerFormStarted=false;
  }catch(error){err.textContent=error.message||'The enquiry could not be submitted. Please retry.';err.style.display='block'}
  finally{button.disabled=false;button.textContent='Request free early access ↗'}
 });
@@ -344,7 +346,7 @@ $('reviewEvidence').addEventListener('click',()=>{
  if(!lastResult)return;
  markJourneyStep(2);
  $('journeyMessage').textContent='Evidence review recorded in this browser. Check the rule details and limitations above before deciding what to change.';
- trackEvent('journey_completed');
+
 });
 $('journeyRetest').addEventListener('click',()=>{
  if(!lastResult)return;
