@@ -495,6 +495,11 @@ def create_release(req: DecideReleaseRequest):
             raise HTTPException(status_code=409, detail="trial provenance mismatch: every result must belong to the requested AI system")
         if result.system_config_hash != system.config_hash():
             raise HTTPException(status_code=409, detail="stale evidence: the AI system configuration changed after this trial. Rerun affected scenarios before creating a release record.")
+        scenario = _scenarios.get(result.scenario_id)
+        if not scenario:
+            raise HTTPException(status_code=409, detail="scenario provenance is missing; rerun this scenario before creating a release record")
+        if not result.scenario_config_hash or result.scenario_config_hash != scenario.config_hash():
+            raise HTTPException(status_code=409, detail="stale scenario evidence: the scenario, policy, or expected behavior changed after this trial. Rerun the scenario before creating a release record.")
 
     history = _release_records.setdefault(req.system_id, [])
     previous_hash = history[-1].evidence_hash if history else None
