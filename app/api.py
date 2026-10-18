@@ -1,7 +1,7 @@
 """Mubayyin HTTP API — verified core engine and public GCC test lab."""
 from __future__ import annotations
 from pathlib import Path
-import secrets, json, os, re, uuid, hashlib
+import secrets, json, os, re, uuid, hashlib, time
 from dataclasses import asdict
 from enum import Enum
 from typing import Optional
@@ -14,7 +14,7 @@ from app.models.core import AISystem, ScenarioCase, HumanReview, Severity, Deter
 from app.services.evaluator import run_trial
 from app.services.release_gate import decide_release, ReleaseThresholds
 app=FastAPI(title="Mubayyin Release Assurance API",description="Vendor-neutral AI release-assurance engine — GCC beachhead.",version="0.2.0")
-_systems={};_scenarios={};_release_records={};_trial_results={};_trial_system_ids={};_system_sessions={};_scenario_sessions={};_trial_sessions={};_release_sessions={}
+_systems={};_scenarios={};_release_records={};_trial_results={};_trial_system_ids={};_system_sessions={};_scenario_sessions={};_trial_sessions={};_release_sessions={};_session_last_seen={};_last_session_prune=0
 class CreateSystemRequest(BaseModel):
  system_id:str=Field(min_length=1,max_length=80);name:str=Field(min_length=1,max_length=120);organization:str=Field(min_length=1,max_length=120);jurisdiction:str=Field(min_length=2,max_length=40);model_provider:str=Field(min_length=1,max_length=80);model_version:str=Field(min_length=1,max_length=80);prompt_version:str=Field(min_length=1,max_length=80);retrieval_version:Optional[str]=Field(default=None,max_length=80);policy_version:str=Field(default="v1",max_length=80);tool_version:Optional[str]=Field(default=None,max_length=80)
 class CreateScenarioRequest(BaseModel):
@@ -23,10 +23,37 @@ class RunTrialRequest(BaseModel): system_id:str=Field(min_length=1,max_length=80
 class HumanReviewRequest(BaseModel): reviewer:str;agrees_with_automation:bool;override_severity:Optional[str]=None;comment:str=""
 class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1";required_scenario_ids:list[str]=Field(default_factory=list)
 DATABASE_URL=os.getenv("DATABASE_URL","");PARTNER_ADMIN_TOKEN=os.getenv("PARTNER_ADMIN_TOKEN","");_db_engine=None;_database_ready=False;_database_error=None
+def _prune_expired_sandbox_sessions():
+ global _last_session_prune
+ now=time.time()
+ if now-_last_session_prune<60:return
+ _last_session_prune=now
+ expired={sid for sid,last in _session_last_seen.items() if now-last>7200}
+ for sid in expired:
+  for key,owner in list(_system_sessions.items()):
+   if owner==sid:_system_sessions.pop(key,None);_systems.pop(key,None)
+  for key,owner in list(_scenario_sessions.items()):
+   if owner==sid:_scenario_sessions.pop(key,None);_scenarios.pop(key,None)
+  for key,owner in list(_trial_sessions.items()):
+   if owner==sid:
+    _trial_sessions.pop(key,None);_trial_system_ids.pop(key,None);_trial_results.pop(key,None)
+  for key,owner in list(_release_sessions.items()):
+   if owner==sid:_release_sessions.pop(key,None)
+  for system_id,history in list(_release_records.items()):
+   kept=[rec for rec in history if _release_sessions.get(rec.record_id)!=sid]
+   if kept:_release_records[system_id]=kept
+   else:_release_records.pop(system_id,None)
+  _session_last_seen.pop(sid,None)
+
+def _touch_sandbox_session(sid:str):
+ _prune_expired_sandbox_sessions()
+ _session_last_seen[sid]=time.time()
+
 def _require_sandbox_session(request:Request)->str:
  sid=request.cookies.get("mubayyin_sandbox_session")
  try:uuid.UUID(sid or "")
  except (ValueError,AttributeError):raise HTTPException(401,"Open the Mubayyin lab page first to create a private sandbox session.")
+ _touch_sandbox_session(sid)
  return sid
 
 def _set_sandbox_cookie(request:Request,response:Response)->str:
@@ -35,6 +62,7 @@ def _set_sandbox_cookie(request:Request,response:Response)->str:
  except (ValueError,AttributeError):
   sid=str(uuid.uuid4())
   response.set_cookie("mubayyin_sandbox_session",sid,max_age=7200,httponly=True,secure=request.url.scheme=="https",samesite="strict",path="/")
+ _touch_sandbox_session(sid)
  return sid
 
 def _database_url():
@@ -106,7 +134,9 @@ def _persist(kind,rid,sid,record,immutable=False):
 @app.on_event("startup")
 def startup():
  _initialize_storage()
- _restore_evidence_records()
+ # Public sandbox records are intentionally ephemeral. Do not enable durable evidence restoration until tenant-scoped auth is implemented.
+ if os.getenv("MUBAYYIN_EVIDENCE_PERSISTENCE_ENABLED","false").lower()=="true":
+  _restore_evidence_records()
 @app.get("/health",include_in_schema=False)
 def health():
  return JSONResponse({"status":"ok","service":"mubayyin-web","version":app.version,"database":"ready" if _database_ready else ("not_configured" if not DATABASE_URL else "unavailable")})
