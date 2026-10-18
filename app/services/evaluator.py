@@ -111,7 +111,7 @@ def reference_judge(scenario: ScenarioCase, model_output: str) -> JudgeScore:
         judge_name="reference_overlap_stub",
         groundedness=round(overlap, 3),
         policy_adherence=1.0,   # deterministic checks own policy adherence
-        language_quality=1.0,   # placeholder until a real Arabic-capable judge is wired in
+        language_quality=0.0,   # not measured by this lexical reference evaluator
         escalation_quality=1.0,
         privacy_behavior=1.0,
         severity=severity,
