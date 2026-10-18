@@ -48,12 +48,12 @@ machine," not "proven," until you've run it.
 Per the strategy doc's validation gates — none of this should be built
 before you have paying pilots and a changed production decision:
 
-- Persistent database (currently in-memory; swap for Postgres)
+- PostgreSQL-backed evidence storage is implemented in the API when DATABASE_URL is configured. It persists systems, scenarios, trials, reviews, and release records and restores them at startup. A live database-backed restart/restore test is still required before claiming end-to-end durability has been verified.
 - Real LLM judge (currently a transparent lexical-overlap stand-in in
   `app/services/evaluator.py::reference_judge` — replace with an actual
   model call behind the same `JudgeFn` signature, and add a second,
   independent judge before trusting disagreement checks)
-- Auth, tenant isolation, CI/CD webhooks, drift watch, SDKs
+- Authentication and tenant isolation, CI/CD webhooks, drift watch, SDKs
 - Any of the "10 organizations use this scenario library" scale — this
   scaffold ships with 10 illustrative scenarios, not a production library
 
