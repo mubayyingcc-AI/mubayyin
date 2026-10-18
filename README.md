@@ -36,19 +36,19 @@ uvicorn app.api:app --reload
 # open http://127.0.0.1:8000/docs
 ```
 
-This wraps the tested `app/models` and `app/services` code in a FastAPI API (`/systems`, `/scenarios`, `/trials`, `/trials/{id}/review`, `/releases`). GitHub Actions runs API and public website tests. PostgreSQL persistence is conditional on `DATABASE_URL`; startup restoration and durable end-to-end evidence still require a live database restart/restore test before broad external use.
+This wraps the tested `app/models` and `app/services` code in a FastAPI API (`/systems`, `/scenarios`, `/trials`, `/trials/{id}/review`, `/releases`). GitHub Actions runs API and public website tests. The public sandbox uses a secure, session-scoped cookie and keeps test artifacts in memory only; submitted test text is not persisted. PostgreSQL is used for consented partnership enquiries and opt-in anonymous usage events. A tenant-authenticated durable evidence mode is not yet enabled.
 
 ## What is deliberately NOT built yet (and why)
 
 Per the strategy doc's validation gates — none of this should be built
 before you have paying pilots and a changed production decision:
 
-- Full production data isolation and tenant-scoped authorization (Postgres persistence is implemented when `DATABASE_URL` is configured; the startup restore path still needs a real restart/restore test)
+- Tenant-authenticated durable evidence mode, tenant-scoped authorization and a real Postgres create → restart → restore verification
 - Real LLM judge (currently a transparent lexical-overlap stand-in in
   `app/services/evaluator.py::reference_judge` — replace with an actual
   model call behind the same `JudgeFn` signature, and add a second,
   independent judge before trusting disagreement checks)
-- Production-grade authentication and tenant isolation, CI/CD webhooks, drift watch, SDKs
+- Production-grade authentication/authorization, CI/CD webhooks, drift watch, SDKs
 - Any of the "10 organizations use this scenario library" scale — this
   scaffold ships with 10 illustrative scenarios, not a production library
 
