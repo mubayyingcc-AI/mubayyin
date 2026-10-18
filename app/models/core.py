@@ -174,6 +174,8 @@ class ReleaseRecord:
     evidence_hash: str
     previous_record_hash: Optional[str]
     trial_result_ids: list[str] = field(default_factory=list)
+    required_scenario_ids: list[str] = field(default_factory=list)
+    missing_scenario_ids: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=_now)
 
     def to_dict(self) -> dict:
