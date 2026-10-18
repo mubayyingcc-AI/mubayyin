@@ -355,6 +355,75 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertIn("interpretation", result["comparison"])
 
 
+
+    def test_release_export_bundle_verifies_and_detects_tampering(self):
+        self.client.post("/systems", json={
+            "system_id": "attestation-system", "name": "synthetic bank assistant",
+            "organization": "sandbox", "jurisdiction": "SA", "model_provider": "test",
+            "model_version": "v1", "prompt_version": "p1", "policy_version": "policy1"
+        })
+        self.client.post("/scenarios", json={
+            "scenario_id": "attestation-scenario", "language": "ar", "dialect": "Saudi",
+            "category": "financial_disclosure", "risk_level": "high",
+            "user_input": "synthetic Arabic test prompt",
+            "expected_behavior": "provide required disclosure"
+        })
+        trial = self.client.post("/trials", json={
+            "system_id": "attestation-system", "scenario_id": "attestation-scenario",
+            "model_output": "synthetic response for evidence export"
+        })
+        self.assertEqual(trial.status_code, 200)
+        release = self.client.post("/releases", json={
+            "system_id": "attestation-system", "result_ids": [trial.json()["result_id"]],
+            "scenario_set_version": "attestation-ar-v1",
+            "required_scenario_ids": ["attestation-scenario"]
+        })
+        self.assertEqual(release.status_code, 200)
+        record_id = release.json()["record_id"]
+
+        exported = self.client.get(f"/releases/{record_id}/export")
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("application/json", exported.headers["content-type"])
+        bundle = exported.json()
+        verified = self.client.post("/releases/verify", json=bundle)
+        self.assertEqual(verified.status_code, 200)
+        self.assertTrue(verified.json()["integrity_valid"])
+        self.assertFalse(verified.json()["authenticity_verified"])
+        self.assertEqual(verified.json()["status"], "integrity_valid_unsigned")
+
+        bundle["record"]["status"] = "safe_to_serve"
+        tampered = self.client.post("/releases/verify", json=bundle)
+        self.assertEqual(tampered.status_code, 200)
+        self.assertFalse(tampered.json()["integrity_valid"])
+        self.assertEqual(tampered.json()["status"], "payload_hash_mismatch")
+
+    def test_release_export_is_private_to_the_creating_sandbox_session(self):
+        first = TestClient(app, base_url="https://testserver")
+        second = TestClient(app, base_url="https://testserver")
+        first.get("/")
+        second.get("/")
+        first.post("/systems", json={
+            "system_id": "private-export-system", "name": "synthetic",
+            "organization": "sandbox", "jurisdiction": "SA", "model_provider": "test",
+            "model_version": "v1", "prompt_version": "p1"
+        })
+        first.post("/scenarios", json={
+            "scenario_id": "private-export-scenario", "language": "en",
+            "category": "disclosure", "risk_level": "low",
+            "user_input": "synthetic", "expected_behavior": "disclose"
+        })
+        trial = first.post("/trials", json={
+            "system_id": "private-export-system", "scenario_id": "private-export-scenario",
+            "model_output": "synthetic response"
+        })
+        release = first.post("/releases", json={
+            "system_id": "private-export-system", "result_ids": [trial.json()["result_id"]],
+            "required_scenario_ids": ["private-export-scenario"]
+        })
+        record_id = release.json()["record_id"]
+        denied = second.get(f"/releases/{record_id}/export")
+        self.assertEqual(denied.status_code, 404)
+
     def test_public_sandbox_sessions_cannot_access_each_others_systems(self):
         first = TestClient(app, base_url="https://testserver")
         second = TestClient(app, base_url="https://testserver")
