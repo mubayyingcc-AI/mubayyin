@@ -104,7 +104,7 @@
   <div class="journey-step" id="step3"><span>3</span><div><strong>Create the release record</strong><small>Capture the current decision and evidence hashes.</small></div><b>○</b></div>
   <div class="journey-step" id="step4"><span>4</span><div><strong>Retest after a change</strong><small>Use the same scenario to check whether the result changed.</small></div><b>○</b></div>
  </div>
- <div class="journey-actions"><button class="btn btn-dark" type="button" id="journeyRetest">Retest this scenario ↻</button><button class="btn btn-ghost-light" type="button" id="journeyHistory">View saved journey</button></div>
+ <div class="journey-actions"><button class="btn btn-ghost-light" type="button" id="reviewEvidence">I reviewed the findings ✓</button><button class="btn btn-dark" type="button" id="journeyRetest">Retest this scenario ↻</button><button class="btn btn-ghost-light" type="button" id="journeyHistory">View saved journey</button></div>
  <div id="journeyMessage" class="journey-message"></div><div id="journeySaved" class="journey-saved" style="display:none"></div>
  <p class="journey-privacy">Progress is saved locally in this browser. Anonymous product-use events are sent only after you opt in. Do not store sensitive test inputs here.</p>
  <label class="analytics-consent"><input type="checkbox" id="analyticsConsent"><span>Share anonymous usage events with Mubayyin to help improve the journey. Only event names, timestamps and a random browser ID—no test response, name, email, or company.</span></label>
@@ -164,6 +164,44 @@
 <div class="toast" id="toast" role="status"></div>
 <script>
 const $=id=>document.getElementById(id);
+
+let journeyState={steps:{},history:[],baseline:null,isRetest:false};
+const JOURNEY_KEY='mubayyin_test_journey_v1';
+const VISITOR_KEY='mubayyin_anon_visitor_v1';
+const OPTIN_KEY='mubayyin_analytics_optin_v1';
+function loadJourney(){
+ try{const s=JSON.parse(localStorage.getItem(JOURNEY_KEY)||'{}');journeyState={...journeyState,...s,steps:s.steps||{},history:Array.isArray(s.history)?s.history:[]}}
+ catch{journeyState={steps:{},history:[],baseline:null,isRetest:false}}
+}
+function saveJourney(){try{localStorage.setItem(JOURNEY_KEY,JSON.stringify({steps:journeyState.steps,history:journeyState.history.slice(-25),baseline:journeyState.baseline}))}catch{}}
+function visitorId(){
+ try{let id=localStorage.getItem(VISITOR_KEY);if(!id){id=crypto.randomUUID();localStorage.setItem(VISITOR_KEY,id)}return id}catch{return null}
+}
+async function trackEvent(name){
+ if(!$('analyticsConsent')||!$('analyticsConsent').checked)return;
+ const id=visitorId();if(!id)return;
+ try{await fetch('/usage/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({visitor_id:id,event_name:name}),keepalive:true})}catch{}
+}
+function markJourneyStep(n){
+ journeyState.steps[n]=true;saveJourney();renderJourney();
+}
+function renderJourney(){
+ const done=[1,2,3,4].filter(n=>journeyState.steps[n]).length;
+ $('journeyCount').textContent=done+' / 4';
+ $('journeyProgress').style.width=(done/4*100)+'%';
+ [1,2,3,4].forEach(n=>{const el=$('step'+n);if(!el)return;el.classList.toggle('done',!!journeyState.steps[n]);el.querySelector('b').textContent=journeyState.steps[n]?'✓':'○'});
+ $('journeyRetest').disabled=!lastResult;
+ $('reviewEvidence').disabled=!lastResult||!!journeyState.steps[2];
+ if(done===4)$('journeyMessage').textContent='Journey complete. You now have a baseline, reviewed evidence, a release record, and a retest. Start another scenario when you are ready.';
+ else if(lastResult&&lastResult.checks&&lastResult.checks.some(x=>!x.passed))$('journeyMessage').textContent='Next: inspect each flagged check. Change the response or scenario only if you can justify the change, then rerun it to see whether the evidence changes.';
+ else if(lastResult)$('journeyMessage').textContent='Next: review the configured checks and their limitations, then create a sandbox release record before retesting.';
+}
+loadJourney();
+$('analyticsConsent').checked=localStorage.getItem(OPTIN_KEY)==='yes';
+$('analyticsConsent').addEventListener('change',()=>{
+ try{localStorage.setItem(OPTIN_KEY,$('analyticsConsent').checked?'yes':'no')}catch{}
+ if($('analyticsConsent').checked)trackEvent('return_visit');
+});
 let lastResult=null;
 function showError(message){$('error').textContent=message;$('error').style.display='block'}
 function hideError(){$('error').style.display='none'}
