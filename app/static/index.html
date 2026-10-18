@@ -226,7 +226,7 @@ $('testForm').addEventListener('submit',async e=>{
  e.preventDefault();hideError();
  const output=$('output').value.trim(), expected=$('expected').value.trim();
  if(!output||!expected){showError('Please provide the expected behaviour and the AI response to test.');return}
- $('runBtn').disabled=true;$('loading').style.display='block';$('result').style.display='none';
+ $('runBtn').disabled=true;$('loading').style.display='block';$('result').style.display='none';trackEvent('lab_started');
  try{
   const systemId=uuid('sandbox');
   const systemPayload={system_id:systemId,name:$('workflow').value.trim()||'Public sandbox workflow',organization:'Public sandbox',jurisdiction:'SA',model_provider:'user_supplied_response',model_version:'user-provided',prompt_version:'unspecified',policy_version:'public-test-v1'};
@@ -245,6 +245,20 @@ $('testForm').addEventListener('submit',async e=>{
  finally{$('runBtn').disabled=false;$('loading').style.display='none'}
 });
 function renderResult(r){
+ markJourneyStep(1);
+ trackEvent('trial_completed');
+ const summary={at:new Date().toISOString(),result_id:r.result_id,category:r.category,risk:r.risk,severity:r.final_severity,passed:(r.checks||[]).filter(x=>x.passed).length,flagged:(r.checks||[]).filter(x=>!x.passed).length,release_status:null};
+ journeyState.history.push(summary);journeyState.history=journeyState.history.slice(-25);
+ if(!journeyState.baseline)journeyState.baseline={severity:r.final_severity,flagged:summary.flagged,category:r.category};
+ if(journeyState.isRetest){
+  markJourneyStep(4);
+  const base=journeyState.baseline||{};
+  const improved=summary.flagged<(base.flagged??summary.flagged)||String(summary.severity)!==String(base.severity);
+  $('journeyMessage').textContent=improved?'Retest completed. The result changed from your first recorded baseline. Review both outcomes carefully; a change is not automatically proof of safety.':'Retest completed. The result did not clearly improve against your first baseline. Review the flags and decide what to change next.';
+  journeyState.isRetest=false;
+  trackEvent('retest_started');
+ }
+ saveJourney();renderJourney();
  const severity=(r.final_severity||'none').toLowerCase();
  $('severity').className='severity sev-'+severity;
  $('severity').textContent=severity==='none'?'No failure detected':severity+' severity';
@@ -292,6 +306,8 @@ $('createRelease').addEventListener('click',async()=>{
   const data=await response.json();
   if(!response.ok)throw new Error(data.detail||'Could not create release record ('+response.status+').');
   lastResult.releaseRecord=data;
+  markJourneyStep(3);trackEvent('release_record_created');
+  const recent=journeyState.history[journeyState.history.length-1];if(recent)recent.release_status=data.status;saveJourney();
   const status=String(data.status||'unknown').replaceAll('_',' ').toUpperCase();
   $('releaseRecord').innerHTML='<div class="finding"><span class="finding-mark '+(data.status==='hold_for_repair'?'bad':'')+'">'+(data.status==='hold_for_repair'?'!':'✓')+'</span><div><strong>'+safeText(status)+'</strong><br><span style="color:#718498">Record ID: '+safeText(data.record_id||'not returned')+'</span></div></div>'+
    '<div style="font-size:10px;color:#718498;overflow-wrap:anywhere;margin-top:10px">Configuration hash: '+safeText(data.system_config_hash||'not returned')+'<br>Evidence hash: '+safeText(data.evidence_hash||'not returned')+'<br>Critical failures: '+safeText(data.critical_failures)+' · Major failures: '+safeText(data.major_failures)+'<br>Reason codes: '+safeText((data.reason_codes||[]).join(', ')||'none returned')+'</div>';
@@ -322,6 +338,37 @@ $('partnerForm').addEventListener('submit',async e=>{
   success.style.display='block';$('partnerForm').reset();
  }catch(error){err.textContent=error.message||'The enquiry could not be submitted. Please retry.';err.style.display='block'}
  finally{button.disabled=false;button.textContent='Request free early access ↗'}
+});
+
+$('reviewEvidence').addEventListener('click',()=>{
+ if(!lastResult)return;
+ markJourneyStep(2);
+ $('journeyMessage').textContent='Evidence review recorded in this browser. Check the rule details and limitations above before deciding what to change.';
+ trackEvent('journey_completed');
+});
+$('journeyRetest').addEventListener('click',()=>{
+ if(!lastResult)return;
+ $('category').value=lastResult.category;
+ $('risk').value=lastResult.risk;
+ $('workflow').value=lastResult.workflow==='Public sandbox workflow'?'':lastResult.workflow;
+ $('expected').focus();
+ $('output').value='';
+ journeyState.isRetest=true;
+ $('journeyMessage').textContent='Scenario settings copied. Update the response after making a change, then run the test again. The previous response was not saved.';
+ trackEvent('retest_started');
+ $('test-lab').scrollIntoView({behavior:'smooth',block:'start'});
+ $('output').focus({preventScroll:true});
+});
+$('journeyHistory').addEventListener('click',()=>{
+ const box=$('journeySaved');box.style.display=box.style.display==='none'?'block':'none';
+ if(box.style.display==='none')return;
+ const rows=journeyState.history.slice().reverse();
+ if(!rows.length){box.textContent='No completed test runs saved in this browser yet.';return}
+ const table=document.createElement('table'),thead=document.createElement('thead'),tr=document.createElement('tr');
+ ['Date','Scenario','Severity','Checks passed','Flags','Release decision'].forEach(t=>{const th=document.createElement('th');th.textContent=t;tr.append(th)});
+ thead.append(tr);table.append(thead);const tbody=document.createElement('tbody');
+ rows.forEach(r=>{const row=document.createElement('tr');[new Date(r.at).toLocaleString(),r.category,r.severity,String(r.passed),String(r.flagged),r.release_status||'Not created'].forEach(v=>{const td=document.createElement('td');td.textContent=v;row.append(td)});tbody.append(row)});
+ table.append(tbody);box.replaceChildren(table);
 });
 $('copyResult').addEventListener('click',async()=>{
  if(!lastResult)return;
