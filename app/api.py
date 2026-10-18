@@ -271,6 +271,25 @@ def tenant_run_trial(req:RunTrialRequest,authorization:Optional[str]=Header(defa
  _tenant_store(tenant_id,"trial",result.result_id,system.system_id,result)
  return {"result_id":result.result_id,"system_id":system.system_id,"scenario_id":scenario.scenario_id,"final_severity":result.final_severity.value,"is_failure":result.is_failure(),"system_config_hash":result.system_config_hash,"scenario_config_hash":result.scenario_config_hash,"deterministic_checks":[asdict(x) for x in result.deterministic_checks],"judge_scores":[{**asdict(x),"severity":x.severity.value} for x in result.judge_scores],"persistence":"durable"}
 
+@app.post("/tenant/trials/{result_id}/review")
+def tenant_review_trial(result_id:str,req:HumanReviewRequest,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ trial=_tenant_get(tenant_id,"trial",result_id)
+ if not trial:raise HTTPException(404,"Tenant trial result not found.")
+ if any(result_id in rec.trial_result_ids for _,_,rec in _tenant_list(tenant_id,"release")):
+  raise HTTPException(409,"This trial is already bound to an immutable Release Record; create a new trial for a later decision.")
+ if not req.reviewer.strip():raise HTTPException(422,"Reviewer is required.")
+ override=None
+ if req.override_severity:
+  try:override=Severity(req.override_severity)
+  except ValueError:raise HTTPException(422,"Invalid override severity.")
+ trial.human_review=HumanReview(reviewer=req.reviewer.strip(),agrees_with_automation=req.agrees_with_automation,override_severity=override,comment=req.comment.strip())
+ rows=_tenant_list(tenant_id,"trial")
+ owner_row=next((row for row in rows if row[0]==result_id),None)
+ if owner_row is None:raise HTTPException(404,"Tenant trial result not found.")
+ _tenant_store(tenant_id,"trial",result_id,owner_row[1],trial)
+ return {"result_id":result_id,"review_saved":True,"persistence":"durable"}
+
 @app.post("/tenant/releases")
 def tenant_create_release(req:DecideReleaseRequest,authorization:Optional[str]=Header(default=None)):
  tenant_id=_require_tenant(authorization)
