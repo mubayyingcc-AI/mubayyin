@@ -24,7 +24,7 @@ class RunTrialRequest(BaseModel): system_id:str=Field(min_length=1,max_length=80
 class HumanReviewRequest(BaseModel): reviewer:str;agrees_with_automation:bool;override_severity:Optional[str]=None;comment:str=""
 class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1";required_scenario_ids:list[str]=Field(default_factory=list)
 class TenantCreateRequest(BaseModel): name:str=Field(min_length=2,max_length=160)
-DATABASE_URL=os.getenv("DATABASE_URL","");PARTNER_ADMIN_TOKEN=os.getenv("PARTNER_ADMIN_TOKEN","");_db_engine=None;_database_ready=False;_database_error=None
+DATABASE_URL=os.getenv("DATABASE_URL","");PARTNER_ADMIN_TOKEN=os.getenv("PARTNER_ADMIN_TOKEN","");TENANT_ADMIN_TOKEN=os.getenv("MUBAYYIN_TENANT_ADMIN_TOKEN","");_db_engine=None;_database_ready=False;_database_error=None
 def _prune_expired_sandbox_sessions():
  global _last_session_prune
  now=time.time()
@@ -138,8 +138,8 @@ def _persist(kind,rid,sid,record,immutable=False):
  return True
 
 def _require_admin(authorization:Optional[str])->None:
- if not PARTNER_ADMIN_TOKEN:raise HTTPException(503,"Tenant provisioning is not configured.")
- if not authorization or not secrets.compare_digest(authorization,"Bearer "+PARTNER_ADMIN_TOKEN):
+ if not TENANT_ADMIN_TOKEN:raise HTTPException(503,"Tenant provisioning is not configured; set MUBAYYIN_TENANT_ADMIN_TOKEN.")
+ if not authorization or not secrets.compare_digest(authorization,"Bearer "+TENANT_ADMIN_TOKEN):
   raise HTTPException(401,"Valid administrator bearer token required.")
 
 def _require_tenant(authorization:Optional[str])->str:
