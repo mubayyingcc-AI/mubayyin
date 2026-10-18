@@ -17,6 +17,8 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertIn('id="journeyPanel"', response.text)
         self.assertIn("Retest this scenario", response.text)
         self.assertIn("analyticsConsent", response.text)
+        self.assertIn('id="nextAction"', response.text)
+        self.assertIn("Retest this scenario", response.text)
 
     def test_health_endpoint(self):
         response = self.client.get("/health")
