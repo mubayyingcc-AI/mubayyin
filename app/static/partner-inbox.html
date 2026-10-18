@@ -26,6 +26,7 @@ button,.button{border:0;border-radius:8px;padding:11px 15px;background:var(--nav
  <section class="card" id="results"><div class="toolbar"><div><h2>Saved enquiries</h2><div class="muted" id="count"></div></div><div><button class="secondary" id="refresh" type="button">Refresh</button> <button id="export" type="button">Export CSV</button></div></div>
   <div class="tablewrap"><table><thead><tr><th>Received</th><th>Contact</th><th>Organization / role</th><th>Market / workflow</th><th>Contribution</th><th>Problem to test</th><th>Reference</th></tr></thead><tbody id="rows"></tbody></table></div><div class="empty" id="empty" style="display:none">No enquiries saved yet.</div>
  </section>
+ <section class="card" id="usageCard"><div class="toolbar"><div><h2>Product usage & repeat visits</h2><div class="muted">Last 30 days · opt-in anonymous event data only</div></div><button id="loadUsage" type="button" class="secondary">Load usage summary</button></div><div id="usageStatus" class="muted" style="margin-top:12px">Usage data is separate from partnership enquiries and only exists after visitors opt in.</div><div id="usageResults" style="display:none;margin-top:14px"></div></section>
  <p class="muted">Security: do not share this token or the inbox URL with prospective partners. Rotate the token in Railway if you think it has been exposed. Submitted details are confidential contact information; use them only for the purpose consented to on the form.</p>
 </main>
 <script>
@@ -64,5 +65,23 @@ $('export').addEventListener('click',()=>{
  const safe=v=>{let s=String(v??'').replace(/\r?\n/g,' ');if(/^[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
  const csv=[columns.join(','),...currentRows.map(r=>columns.map(k=>safe(r[k])).join(','))].join('\r\n');
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));const a=node('a','download');a.href=url;a.download='mubayyin-partner-enquiries.csv';a.click();URL.revokeObjectURL(url);
+});
+
+$('loadUsage').addEventListener('click',async()=>{
+ const button=$('loadUsage');button.disabled=true;$('usageStatus').textContent='Loading opt-in usage events…';
+ try{
+  const response=await fetch('/partner-inbox/usage',{headers:{Authorization:'Bearer '+authToken},cache:'no-store'});
+  const data=await response.json();if(!response.ok)throw new Error(data.detail||'Could not load usage summary.');
+  const box=$('usageResults');box.replaceChildren();
+  const p=node('p','Returning anonymous visitors on 2+ distinct days: '+data.returning_visitors_on_multiple_days+' (30-day window)');p.style.fontWeight='750';box.append(p);
+  const def=node('p',data.definition||'');def.className='muted';box.append(def);
+  const table=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr');
+  ['Event','Total events','Unique anonymous visitors'].forEach(v=>{const th=node('th',v);hr.append(th)});head.append(hr);table.append(head);
+  const body=document.createElement('tbody');
+  (data.events||[]).forEach(item=>{const tr=node('tr','');[item.event_name,item.event_count,item.unique_visitors].forEach(v=>tr.append(node('td',v)));body.append(tr)});
+  table.append(body);box.append(table);box.style.display='block';
+  $('usageStatus').textContent='Loaded. Counts include only users who explicitly opted in to anonymous usage analytics.';
+ }catch(err){$('usageResults').style.display='none';$('usageStatus').textContent=err.message||'Could not load usage summary.'}
+ finally{button.disabled=false}
 });
 </script></body></html>
