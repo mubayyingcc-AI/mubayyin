@@ -89,6 +89,7 @@ class DurableTenantWorkspaceTests(unittest.TestCase):
         })
         self.assertEqual(system.status_code, 200, system.text)
         self.assertEqual(system.json()["persistence"], "durable")
+        self.assertIn("no-store", system.headers.get("cache-control", ""))
 
         scenario = self.client.post("/tenant/scenarios", headers=headers, json={
             "scenario_id": "pilot-disclosure-1", "language": "en", "category": "disclosure",
@@ -127,6 +128,7 @@ class DurableTenantWorkspaceTests(unittest.TestCase):
 
         exported = second_client.get(f"/tenant/releases/{record_id}/export", headers=headers)
         self.assertEqual(exported.status_code, 200, exported.text)
+        self.assertIn("no-store", exported.headers.get("cache-control", ""))
         bundle = exported.json()
         self.assertEqual(bundle["evidence"]["trials"][0]["result_id"], trial.json()["result_id"])
         verified = second_client.post("/releases/verify", json=bundle)
