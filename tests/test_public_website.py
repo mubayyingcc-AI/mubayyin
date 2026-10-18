@@ -5,7 +5,8 @@ import app.api as api_module
 
 class WebsiteAndApiTests(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(app)
+        self.client = TestClient(app, base_url="https://testserver")
+        self.client.get("/")  # establishes a session-scoped, ephemeral public sandbox
 
     def test_homepage_serves_mubayyin_website(self):
         response = self.client.get("/")
@@ -348,6 +349,39 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertTrue(result["comparison"]["evidence_changed"])
         self.assertIn(second.json()["result_id"], result["comparison"]["added_trial_result_ids"])
         self.assertIn("interpretation", result["comparison"])
+
+
+    def test_public_sandbox_sessions_cannot_access_each_others_systems(self):
+        first = TestClient(app, base_url="https://testserver")
+        second = TestClient(app, base_url="https://testserver")
+        first.get("/")
+        second.get("/")
+        system = first.post("/systems", json={
+            "system_id": "session-isolation-system", "name": "sandbox", "organization": "Public sandbox",
+            "jurisdiction": "SA", "model_provider": "test", "model_version": "v1",
+            "prompt_version": "v1", "policy_version": "v1"
+        })
+        self.assertEqual(system.status_code, 200)
+        self.assertEqual(system.json()["persistence"], "memory_only")
+        scenario = first.post("/scenarios", json={
+            "scenario_id": "session-isolation-scenario", "language": "en", "category": "disclosure",
+            "risk_level": "low", "user_input": "synthetic", "expected_behavior": "disclose"
+        })
+        self.assertEqual(scenario.status_code, 200)
+        attempt = second.post("/trials", json={
+            "system_id": "session-isolation-system", "scenario_id": "session-isolation-scenario",
+            "model_output": "private test output"
+        })
+        self.assertEqual(attempt.status_code, 404)
+
+    def test_public_api_rejects_writes_without_a_sandbox_session_cookie(self):
+        client = TestClient(app, base_url="https://testserver")
+        response = client.post("/systems", json={
+            "system_id": "no-session-system", "name": "sandbox", "organization": "Public sandbox",
+            "jurisdiction": "SA", "model_provider": "test", "model_version": "v1",
+            "prompt_version": "v1", "policy_version": "v1"
+        })
+        self.assertEqual(response.status_code, 401)
 
 if __name__ == "__main__":
     unittest.main()
