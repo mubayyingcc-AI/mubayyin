@@ -177,6 +177,8 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertTrue(any(not check["passed"] for check in payload["deterministic_checks"]))
         self.assertEqual(payload["judge_scores"][0]["judge_name"], "reference_overlap_stub")
         self.assertIn("lexical overlap", payload["judge_scores"][0]["reason"])
+        self.assertIsNone(payload["judge_scores"][0]["language_quality"])
+        self.assertIsNone(payload["judge_scores"][0]["privacy_behavior"])
         self.assertTrue(payload["system_config_hash"])
 
         release = self.client.post("/releases", json={
