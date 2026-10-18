@@ -6,7 +6,7 @@ from dataclasses import asdict
 from enum import Enum
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Header, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -57,6 +57,13 @@ def _persist(kind,rid,sid,record,immutable=False):
  return True
 @app.on_event("startup")
 def startup():_initialize_storage()
+@app.get("/health",include_in_schema=False)
+def health():
+ return JSONResponse({"status":"healthy","service":"mubayyin-web","version":app.version,"database":"ready" if _database_ready else ("not_configured" if not DATABASE_URL else "unavailable")})
+@app.get("/ready",include_in_schema=False)
+def ready():
+ if DATABASE_URL and not _database_ready: raise HTTPException(503,"Database is configured but not ready.")
+ return {"ready":True,"database":"ready" if _database_ready else "memory_only"}
 class PartnerEnquiryRequest(BaseModel):
  name:str=Field(min_length=2,max_length=120);email:str=Field(min_length=5,max_length=254);organization:str=Field(min_length=2,max_length=160);role:str=Field(min_length=2,max_length=120);jurisdiction:str=Field(min_length=2,max_length=80);workflow_type:str=Field(min_length=2,max_length=120);current_problem:str=Field(min_length=20,max_length=3000);preferred_involvement:str=Field(min_length=2,max_length=80);consent_to_contact:bool;website:str=""
 @app.post("/partnership/enquiries",status_code=201)
