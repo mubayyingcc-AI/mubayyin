@@ -181,6 +181,7 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertIsNone(payload["judge_scores"][0]["language_quality"])
         self.assertIsNone(payload["judge_scores"][0]["privacy_behavior"])
         self.assertTrue(payload["system_config_hash"])
+        self.assertEqual(payload["persistence"], "memory_only")
 
         release = self.client.post("/releases", json={
             "system_id": "test-system-1",
@@ -194,6 +195,7 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertTrue(record["record_id"])
         self.assertTrue(record["system_config_hash"])
         self.assertTrue(record["evidence_hash"])
+        self.assertEqual(record["persistence"], "memory_only")
 
 
     def test_arabic_gcc_page_serves_right_to_left_and_links_to_english(self):
