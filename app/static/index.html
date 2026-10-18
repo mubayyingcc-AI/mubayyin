@@ -87,6 +87,13 @@
       <div class="trace-head"><span>Reference evaluator details</span><span class="tag">NOT AN LLM JUDGE</span></div>
       <div id="judgeMetrics"></div>
      </div>
+     <div class="trace" style="margin-top:14px">
+      <div class="trace-head"><span>Release decision</span><span class="tag">SANDBOX RECORD</span></div>
+      <p style="font-size:11px;color:#718498;margin:0 0 12px">Create a real release decision record from this trial. This records the engine's current decision; it is not a production certification.</p>
+      <button class="btn btn-dark" id="createRelease" type="button">Create sandbox release record</button>
+      <div id="releaseError" class="error" role="alert"></div>
+      <div id="releaseRecord" style="display:none;margin-top:14px"></div>
+     </div>
      <div class="locked">
       <div class="lock-head"><span>🔒</span><span>Complete evidence report</span><span class="tag">PAID TIER</span></div>
       <div class="lock-blur">Detailed evidence chain · Reproducibility record · Remediation plan · Retest checklist · Exportable Release Record</div>
@@ -184,11 +191,41 @@ function renderResult(r){
   $('judgeMetrics').textContent='';
  }
  $('limits').textContent='Limitations: this test evaluates one supplied response using configured deterministic checks and a lexical-overlap reference evaluator, not an independent language model. It does not connect to your AI system, prove a real external action occurred, reliably understand semantic paraphrases or all Arabic dialect risks, or issue production release approval. “No failure detected” is not a safety certification. API records are held in process memory and may be lost on restart; do not submit sensitive or production data.';
+ $('releaseRecord').style.display='none';$('releaseRecord').innerHTML='';
+ $('releaseError').style.display='none';
+ $('createRelease').disabled=false;
+ $('createRelease').textContent='Create sandbox release record';
  $('result').style.display='block';$('result').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
+$('createRelease').addEventListener('click',async()=>{
+ if(!lastResult)return;
+ const button=$('createRelease');
+ button.disabled=true;button.textContent='Creating release record…';
+ $('releaseError').style.display='none';
+ try{
+  const response=await fetch('/releases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+   system_id:lastResult.systemId,
+   result_ids:[lastResult.result_id],
+   approver:null,
+   scenario_set_version:'public-test-v1'
+  })});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Could not create release record ('+response.status+').');
+  lastResult.releaseRecord=data;
+  const status=String(data.status||'unknown').replaceAll('_',' ').toUpperCase();
+  $('releaseRecord').innerHTML='<div class="finding"><span class="finding-mark '+(data.status==='hold_for_repair'?'bad':'')+'">✓</span><div><strong>'+safeText(status)+'</strong><br><span style="color:#718498">Record ID: '+safeText(data.record_id||'not returned')+'</span></div></div>'+
+   '<div style="font-size:10px;color:#718498;overflow-wrap:anywhere;margin-top:10px">Configuration hash: '+safeText(data.system_config_hash||'not returned')+'<br>Evidence hash: '+safeText(data.evidence_hash||'not returned')+'<br>Critical failures: '+safeText(data.critical_failures)+' · Major failures: '+safeText(data.major_failures)+'<br>Reason codes: '+safeText((data.reason_codes||[]).join(', ')||'none returned')+'</div>';
+  $('releaseRecord').style.display='block';
+  button.textContent='Release record created';
+ }catch(err){
+  $('releaseError').textContent=err.message||'Release record creation failed.';
+  $('releaseError').style.display='block';
+  button.disabled=false;button.textContent='Retry release record';
+ }
+});
 $('copyResult').addEventListener('click',async()=>{
  if(!lastResult)return;
- const summary=['Mubayyin public sandbox result','Workflow: '+lastResult.workflow,'Scenario: '+lastResult.category,'Risk: '+lastResult.risk,'Severity: '+lastResult.final_severity,'Trial ID: '+lastResult.result_id,'Checks: '+lastResult.checks.map(c=>c.rule+': '+(c.passed?'PASS':'FLAG')+(c.detail?' — '+c.detail:'')).join(' | '),'Limitations: single response, current reference engine; not a production certification.'].join('\n');
+ const summary=['Mubayyin public sandbox result','Workflow: '+lastResult.workflow,'Scenario: '+lastResult.category,'Risk: '+lastResult.risk,'Severity: '+lastResult.final_severity,'Trial ID: '+lastResult.result_id,'Checks: '+lastResult.checks.map(c=>c.rule+': '+(c.passed?'PASS':'FLAG')+(c.detail?' — '+c.detail:'')).join(' | '),'Release record: '+(lastResult.releaseRecord?JSON.stringify(lastResult.releaseRecord):'not created'),'Limitations: single response, current reference engine; not a production certification.'].join('\n');
  try{await navigator.clipboard.writeText(summary);toast('Result summary copied.')}catch{const t=document.createElement('textarea');t.value=summary;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();toast('Result summary copied.')}
 });
 </script>
