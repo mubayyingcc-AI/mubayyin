@@ -18,6 +18,10 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertIn("Retest this scenario", response.text)
         self.assertIn("analyticsConsent", response.text)
         self.assertIn('id="nextAction"', response.text)
+        self.assertIn("Banking release approval: bilingual customer-support agent", response.text)
+        self.assertIn("BANK_SCENARIOS", response.text)
+        self.assertIn("Returns are not guaranteed and depend on the product terms.", response.text)
+        self.assertIn("Simulation only.", response.text)
         self.assertIn("Retest this scenario", response.text)
 
     def test_health_endpoint(self):
