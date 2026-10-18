@@ -211,6 +211,7 @@ def _persist_evidence(record_type: str, record_id: str, system_id: str, record, 
 
 
 def _restore_evidence_records() -> None:
+    global _database_ready, _database_error
     if not _database_ready or _db_engine is None:
         return
     try:
@@ -240,7 +241,6 @@ def _restore_evidence_records() -> None:
                 record = ReleaseRecord(**payload)
                 _release_records.setdefault(row["system_id"], []).append(record)
     except Exception as exc:
-        global _database_ready, _database_error
         _database_ready = False
         _database_error = type(exc).__name__
 
