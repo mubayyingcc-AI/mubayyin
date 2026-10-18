@@ -189,8 +189,16 @@ def partner_usage(authorization:Optional[str]=Header(default=None)):
 def release(req:DecideReleaseRequest):
  s=_systems.get(req.system_id)
  if not s:raise HTTPException(404,"system not found")
- rs=[_trial_results[x] for x in req.result_ids if x in _trial_results]
+ if len(req.result_ids)!=len(set(req.result_ids)):raise HTTPException(422,"Duplicate trial result IDs are not allowed.")
+ unknown=[x for x in req.result_ids if x not in _trial_results]
+ if unknown:raise HTTPException(404,"One or more trial result IDs were not found.")
+ rs=[_trial_results[x] for x in req.result_ids]
  if not rs:raise HTTPException(400,"no valid trial results provided")
+ for r in rs:
+  sc=_scenarios.get(r.scenario_id)
+  if not sc:raise HTTPException(409,"A referenced scenario is unavailable.")
+  if r.system_config_hash!=s.config_hash():raise HTTPException(409,"Trial evidence is stale for the current system configuration; rerun the scenario.")
+  if not r.scenario_config_hash or r.scenario_config_hash!=sc.config_hash():raise HTTPException(409,"Trial evidence is stale for the current scenario configuration; rerun the scenario.")
  h=_release_records.setdefault(req.system_id,[]);prev=h[-1].evidence_hash if h else None
  rec=decide_release(s,rs,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,prev,req.scenario_set_version)
  d=_persist("release",rec.record_id,s.system_id,rec,immutable=True);h.append(rec);p=rec.to_dict();p["persistence"]="durable" if d else "memory_only";return p
