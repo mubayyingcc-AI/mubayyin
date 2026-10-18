@@ -52,6 +52,7 @@ def _evidence_hash(system: AISystem, results: list[TrialResult]) -> str:
         evidence.append({
             "result_id": result.result_id,
             "scenario_id": result.scenario_id,
+            "scenario_config_hash": result.scenario_config_hash,
             "output_sha256": hashlib.sha256(result.model_output.encode("utf-8")).hexdigest(),
             "final_severity": result.final_severity.value,
             "deterministic_checks": [{"passed": check.passed, "rule": check.rule, "detail": check.detail} for check in result.deterministic_checks],
