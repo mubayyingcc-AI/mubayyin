@@ -11,10 +11,9 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 import os
 import re
-from datetime import datetime, timezone
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
