@@ -5,7 +5,7 @@ import secrets, json, os, re, uuid, hashlib
 from dataclasses import asdict
 from enum import Enum
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Header, Query
+from fastapi import FastAPI, HTTPException, Header, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
@@ -14,7 +14,7 @@ from app.models.core import AISystem, ScenarioCase, HumanReview, Severity, Deter
 from app.services.evaluator import run_trial
 from app.services.release_gate import decide_release, ReleaseThresholds
 app=FastAPI(title="Mubayyin Release Assurance API",description="Vendor-neutral AI release-assurance engine — GCC beachhead.",version="0.2.0")
-_systems={};_scenarios={};_release_records={};_trial_results={};_trial_system_ids={}
+_systems={};_scenarios={};_release_records={};_trial_results={};_trial_system_ids={};_system_sessions={};_scenario_sessions={};_trial_sessions={};_release_sessions={}
 class CreateSystemRequest(BaseModel):
  system_id:str=Field(min_length=1,max_length=80);name:str=Field(min_length=1,max_length=120);organization:str=Field(min_length=1,max_length=120);jurisdiction:str=Field(min_length=2,max_length=40);model_provider:str=Field(min_length=1,max_length=80);model_version:str=Field(min_length=1,max_length=80);prompt_version:str=Field(min_length=1,max_length=80);retrieval_version:Optional[str]=Field(default=None,max_length=80);policy_version:str=Field(default="v1",max_length=80);tool_version:Optional[str]=Field(default=None,max_length=80)
 class CreateScenarioRequest(BaseModel):
@@ -23,6 +23,20 @@ class RunTrialRequest(BaseModel): system_id:str=Field(min_length=1,max_length=80
 class HumanReviewRequest(BaseModel): reviewer:str;agrees_with_automation:bool;override_severity:Optional[str]=None;comment:str=""
 class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1";required_scenario_ids:list[str]=Field(default_factory=list)
 DATABASE_URL=os.getenv("DATABASE_URL","");PARTNER_ADMIN_TOKEN=os.getenv("PARTNER_ADMIN_TOKEN","");_db_engine=None;_database_ready=False;_database_error=None
+def _require_sandbox_session(request:Request)->str:
+ sid=request.cookies.get("mubayyin_sandbox_session")
+ try:uuid.UUID(sid or "")
+ except (ValueError,AttributeError):raise HTTPException(401,"Open the Mubayyin lab page first to create a private sandbox session.")
+ return sid
+
+def _set_sandbox_cookie(request:Request,response:Response)->str:
+ sid=request.cookies.get("mubayyin_sandbox_session")
+ try:uuid.UUID(sid or "")
+ except (ValueError,AttributeError):
+  sid=str(uuid.uuid4())
+  response.set_cookie("mubayyin_sandbox_session",sid,max_age=7200,httponly=True,secure=request.url.scheme=="https",samesite="strict",path="/")
+ return sid
+
 def _database_url():
  u=DATABASE_URL.strip()
  if u.startswith("postgres://"):u="postgresql://"+u[10:]
@@ -124,34 +138,47 @@ def list_partners(authorization:Optional[str]=Header(default=None),limit:int=Que
  with _db_engine.connect() as c:rows=c.execute(text("SELECT enquiry_id,name,email,organization,role,jurisdiction,workflow_type,current_problem,preferred_involvement,created_at FROM mubayyin_partner_enquiries ORDER BY created_at DESC LIMIT :limit"),{"limit":limit}).mappings().all()
  return {"enquiries":[{**dict(r),"created_at":r["created_at"].isoformat() if r["created_at"] else None} for r in rows]}
 @app.get("/",include_in_schema=False)
-def website():return FileResponse(Path(__file__).parent/"static"/"index.html",media_type="text/html")
+def website(request:Request):
+ response=FileResponse(Path(__file__).parent/"static"/"index.html",media_type="text/html")
+ _set_sandbox_cookie(request,response)
+ return response
 @app.get("/ar",include_in_schema=False)
-def arabic():return FileResponse(Path(__file__).parent/"static"/"arabic.html",media_type="text/html")
+def arabic(request:Request):
+ response=FileResponse(Path(__file__).parent/"static"/"arabic.html",media_type="text/html")
+ _set_sandbox_cookie(request,response)
+ return response
 @app.post("/systems")
-def system(req:CreateSystemRequest):
+def system(req:CreateSystemRequest,request:Request):
+ sid=_require_sandbox_session(request)
  s=AISystem(**req.dict())
  existing=_systems.get(s.system_id)
+ if existing and _system_sessions.get(s.system_id)!=sid:raise HTTPException(404,"Sandbox system not found.")
  if existing and existing.config_hash()!=s.config_hash():raise HTTPException(409,"System ID already exists with a different configuration; create a new versioned system ID.")
- d=_persist("system",s.system_id,s.system_id,s);_systems[s.system_id]=s
- return {"system_id":s.system_id,"config_hash":s.config_hash(),"persistence":"durable" if d else "memory_only"}
+ _systems[s.system_id]=s;_system_sessions[s.system_id]=sid
+ # Public lab evidence is intentionally ephemeral: never persist arbitrary submitted model output.
+ return {"system_id":s.system_id,"config_hash":s.config_hash(),"persistence":"memory_only"}
 @app.post("/scenarios")
-def scenario(req:CreateScenarioRequest):
+def scenario(req:CreateScenarioRequest,request:Request):
+ sid=_require_sandbox_session(request)
  s=ScenarioCase(**req.dict())
  existing=_scenarios.get(s.scenario_id)
+ if existing and _scenario_sessions.get(s.scenario_id)!=sid:raise HTTPException(404,"Sandbox scenario not found.")
  if existing and existing.config_hash()!=s.config_hash() and any(t.scenario_id==s.scenario_id for t in _trial_results.values()):
   raise HTTPException(409,"Scenario is already referenced by trial evidence; create a new scenario ID for changed requirements.")
- d=_persist("scenario",s.scenario_id,"scenario:"+s.scenario_id,s);_scenarios[s.scenario_id]=s
- return {"scenario_id":s.scenario_id,"scenario_config_hash":s.config_hash(),"persistence":"durable" if d else "memory_only"}
+ _scenarios[s.scenario_id]=s;_scenario_sessions[s.scenario_id]=sid
+ return {"scenario_id":s.scenario_id,"scenario_config_hash":s.config_hash(),"persistence":"memory_only"}
 @app.post("/trials")
-def trial(req:RunTrialRequest):
+def trial(req:RunTrialRequest,request:Request):
+ sid=_require_sandbox_session(request)
  s=_systems.get(req.system_id);sc=_scenarios.get(req.scenario_id)
- if not s or not sc:raise HTTPException(404,"system or scenario not found")
- r=run_trial(sc,req.model_output);r.system_config_hash=s.config_hash();r.scenario_config_hash=sc.config_hash();d=_persist("trial",r.result_id,s.system_id,r);_trial_results[r.result_id]=r;_trial_system_ids[r.result_id]=s.system_id
- return {"result_id":r.result_id,"final_severity":r.final_severity.value,"is_failure":r.is_failure(),"deterministic_checks":[c.__dict__ for c in r.deterministic_checks],"judge_scores":[{"judge_name":j.judge_name,"groundedness":j.groundedness,"policy_adherence":j.policy_adherence,"language_quality":j.language_quality,"escalation_quality":j.escalation_quality,"privacy_behavior":j.privacy_behavior,"severity":j.severity.value,"reason":j.reason} for j in r.judge_scores],"system_config_hash":r.system_config_hash,"scenario_config_hash":r.scenario_config_hash,"persistence":"durable" if d else "memory_only"}
+ if not s or not sc or _system_sessions.get(req.system_id)!=sid or _scenario_sessions.get(req.scenario_id)!=sid:raise HTTPException(404,"Sandbox system or scenario not found.")
+ r=run_trial(sc,req.model_output);r.system_config_hash=s.config_hash();r.scenario_config_hash=sc.config_hash();_trial_results[r.result_id]=r;_trial_system_ids[r.result_id]=s.system_id;_trial_sessions[r.result_id]=sid
+ return {"result_id":r.result_id,"final_severity":r.final_severity.value,"is_failure":r.is_failure(),"deterministic_checks":[c.__dict__ for c in r.deterministic_checks],"judge_scores":[{"judge_name":j.judge_name,"groundedness":j.groundedness,"policy_adherence":j.policy_adherence,"language_quality":j.language_quality,"escalation_quality":j.escalation_quality,"privacy_behavior":j.privacy_behavior,"severity":j.severity.value,"reason":j.reason} for j in r.judge_scores],"system_config_hash":r.system_config_hash,"scenario_config_hash":r.scenario_config_hash,"persistence":"memory_only"}
 @app.post("/trials/{result_id}/review")
-def review(result_id:str,req:HumanReviewRequest):
+def review(result_id:str,req:HumanReviewRequest,request:Request):
+ sid=_require_sandbox_session(request)
  r=_trial_results.get(result_id)
- if not r:raise HTTPException(404,"trial result not found")
+ if not r or _trial_sessions.get(result_id)!=sid:raise HTTPException(404,"Sandbox trial result not found.")
  if any(r.result_id in rec.trial_result_ids for records in _release_records.values() for rec in records):raise HTTPException(409,"This trial is already bound to an immutable Release Record; create a new trial and review it before a new release.")
  if not req.reviewer.strip():raise HTTPException(422,"Reviewer is required.")
  override=None
@@ -159,8 +186,7 @@ def review(result_id:str,req:HumanReviewRequest):
   try:override=Severity(req.override_severity)
   except ValueError:raise HTTPException(422,"Invalid override severity.")
  r.human_review=HumanReview(reviewer=req.reviewer.strip(),agrees_with_automation=req.agrees_with_automation,override_severity=override,comment=req.comment.strip())
- d=_persist("trial",r.result_id,_trial_system_ids.get(r.result_id,""),r)
- return {"result_id":r.result_id,"review_saved":True,"persistence":"durable" if d else "memory_only"}
+ return {"result_id":r.result_id,"review_saved":True,"persistence":"memory_only"}
 
 ALLOWED_USAGE_EVENTS={"trial_completed","release_record_created","retest_completed","partner_enquiry_started","language_switched"}
 class UsageEventRequest(BaseModel):
@@ -190,10 +216,11 @@ def partner_usage(authorization:Optional[str]=Header(default=None)):
  return {"events":[dict(x) for x in events],"returning_visitors_on_multiple_days":int(returning),"definition":"Anonymous visitor IDs with opt-in events on two or more distinct days in the last 30 days."}
 
 @app.get("/releases/{baseline_record_id}/compare/{candidate_record_id}")
-def compare_releases(baseline_record_id:str,candidate_record_id:str):
+def compare_releases(baseline_record_id:str,candidate_record_id:str,request:Request):
+ sid=_require_sandbox_session(request)
  records={rec.record_id:rec for history in _release_records.values() for rec in history}
  baseline=records.get(baseline_record_id);candidate=records.get(candidate_record_id)
- if not baseline or not candidate:raise HTTPException(404,"One or both Release Records were not found.")
+ if not baseline or not candidate or _release_sessions.get(baseline_record_id)!=sid or _release_sessions.get(candidate_record_id)!=sid:raise HTTPException(404,"One or both sandbox Release Records were not found.")
  if baseline.system_id!=candidate.system_id:raise HTTPException(409,"Release Records must belong to the same system identity.")
  base_trials=set(baseline.trial_result_ids);candidate_trials=set(candidate.trial_result_ids)
  base_missing=set(baseline.missing_scenario_ids);candidate_missing=set(candidate.missing_scenario_ids)
@@ -207,18 +234,20 @@ def compare_releases(baseline_record_id:str,candidate_record_id:str):
  }
 
 @app.post("/releases")
-def release(req:DecideReleaseRequest):
+def release(req:DecideReleaseRequest,request:Request):
+ sid=_require_sandbox_session(request)
  s=_systems.get(req.system_id)
- if not s:raise HTTPException(404,"system not found")
+ if not s or _system_sessions.get(req.system_id)!=sid:raise HTTPException(404,"Sandbox system not found.")
  if len(req.result_ids)!=len(set(req.result_ids)):raise HTTPException(422,"Duplicate trial result IDs are not allowed.")
  if len(req.required_scenario_ids)!=len(set(req.required_scenario_ids)):raise HTTPException(422,"Duplicate required scenario IDs are not allowed.")
- unknown_scenarios=[x for x in req.required_scenario_ids if x not in _scenarios]
+ unknown_scenarios=[x for x in req.required_scenario_ids if x not in _scenarios or _scenario_sessions.get(x)!=sid]
  if unknown_scenarios:raise HTTPException(404,"One or more required scenario IDs were not found.")
  unknown=[x for x in req.result_ids if x not in _trial_results]
  if unknown:raise HTTPException(404,"One or more trial result IDs were not found.")
  rs=[_trial_results[x] for x in req.result_ids]
  if not rs:raise HTTPException(400,"no valid trial results provided")
  for rid,r in zip(req.result_ids,rs):
+  if _trial_sessions.get(rid)!=sid:raise HTTPException(404,"Sandbox trial result not found.")
   if _trial_system_ids.get(rid)!=req.system_id:raise HTTPException(409,"Trial evidence belongs to a different system.")
   sc=_scenarios.get(r.scenario_id)
   if not sc:raise HTTPException(409,"A referenced scenario is unavailable.")
@@ -226,4 +255,4 @@ def release(req:DecideReleaseRequest):
   if not r.scenario_config_hash or r.scenario_config_hash!=sc.config_hash():raise HTTPException(409,"Trial evidence is stale for the current scenario configuration; rerun the scenario.")
  h=_release_records.setdefault(req.system_id,[]);prev=h[-1].evidence_hash if h else None
  rec=decide_release(s,rs,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,prev,req.scenario_set_version,req.required_scenario_ids)
- d=_persist("release",rec.record_id,s.system_id,rec,immutable=True);h.append(rec);p=rec.to_dict();p["persistence"]="durable" if d else "memory_only";return p
+ h.append(rec);_release_sessions[rec.record_id]=sid;p=rec.to_dict();p["persistence"]="memory_only";return p
