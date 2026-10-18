@@ -113,10 +113,10 @@ class JudgeScore:
     """Structured rubric from one LLM judge. Never a single opaque number."""
     judge_name: str
     groundedness: float
-    policy_adherence: float
-    language_quality: float
-    escalation_quality: float
-    privacy_behavior: float
+    policy_adherence: Optional[float]
+    language_quality: Optional[float]
+    escalation_quality: Optional[float]
+    privacy_behavior: Optional[float]
     severity: Severity
     reason: str
 
