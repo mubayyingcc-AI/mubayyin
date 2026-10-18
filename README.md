@@ -1,4 +1,4 @@
-# Mubayyin — Release Assurance Engine (v0.1 scaffold)
+# Mubayyin — Release Assurance Lab (pre-production)
 
 This is the smallest real version of the loop in the strategy doc:
 
@@ -6,16 +6,15 @@ This is the smallest real version of the loop in the strategy doc:
 AISystem  →  ScenarioCase[]  →  TrialResult[]  →  ReleaseRecord
 ```
 
-## What's actually verified (run this first)
+## Automated checks
 
 ```bash
-python3 demo.py          # end-to-end run, prints a real Release Record
-python3 -m unittest tests.test_engine -v   # 13 tests, all passing
+python3 demo.py
+pip install -r requirements.txt
+python3 -m unittest discover -s tests -v
 ```
 
-Both use **zero external dependencies** — pure Python 3 standard library —
-so they run anywhere with no setup. This is the part of the project I could
-fully test and prove works in this environment.
+The demo and core engine use Python's standard library; the HTTP API and full test suite require the packages in `requirements.txt`. GitHub Actions runs the engine/API/public-website tests and a demo end-to-end smoke test. Passing automated tests does not establish production readiness or validate semantic Arabic quality.
 
 What the demo proves:
 - A privacy leak and an unauthorized transfer are caught by **deterministic
@@ -37,6 +36,17 @@ uvicorn app.api:app --reload
 ```
 
 This wraps the tested `app/models` and `app/services` code in a FastAPI API (`/systems`, `/scenarios`, `/trials`, `/trials/{id}/review`, `/releases`). GitHub Actions runs API and public website tests. The public sandbox uses a secure, session-scoped cookie and keeps test artifacts in memory only; submitted test text is not persisted. PostgreSQL is used for consented partnership enquiries and opt-in anonymous usage events. A tenant-authenticated durable evidence mode is not yet enabled.
+
+## Portable Release Record export and verification
+
+The English and Arabic labs can export a sandbox Release Record as a JSON bundle. The bundle includes a canonical SHA-256 payload hash and supports optional HMAC-SHA256 signing when `MUBAYYIN_ATTESTATION_KEY` is configured.
+
+- API export: `GET /releases/{record_id}/export` (owning sandbox session only)
+- API verification: `POST /releases/verify`
+- Offline verifier: `python scripts/verify_release_bundle.py <bundle.json>`
+- Details and interpretation limits: [docs/release-record-bundle.md](docs/release-record-bundle.md)
+
+An unsigned hash can detect changes but does not authenticate who created the record. HMAC is a shared-secret mechanism, not a public-key signature. A valid bundle does not certify AI safety or compliance, and the public sandbox's underlying evidence remains ephemeral.
 
 ## What is deliberately NOT built yet (and why)
 
