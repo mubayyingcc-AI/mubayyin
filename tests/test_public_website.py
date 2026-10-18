@@ -278,5 +278,34 @@ class WebsiteAndApiTests(unittest.TestCase):
         })
         self.assertEqual(review.status_code, 409)
 
+
+    def test_release_holds_when_required_scenario_coverage_is_missing(self):
+        self.client.post("/systems", json={
+            "system_id": "coverage-system", "name": "test", "organization": "sandbox",
+            "jurisdiction": "SA", "model_provider": "test", "model_version": "v1",
+            "prompt_version": "v1", "policy_version": "v1"
+        })
+        for scenario_id in ("coverage-scenario-a", "coverage-scenario-b"):
+            self.client.post("/scenarios", json={
+                "scenario_id": scenario_id, "language": "ar", "category": "disclosure",
+                "risk_level": "low", "user_input": "synthetic", "expected_behavior": "disclose"
+            })
+        trial = self.client.post("/trials", json={
+            "system_id": "coverage-system", "scenario_id": "coverage-scenario-a",
+            "model_output": "sample output"
+        })
+        self.assertEqual(trial.status_code, 200)
+        response = self.client.post("/releases", json={
+            "system_id": "coverage-system", "result_ids": [trial.json()["result_id"]],
+            "required_scenario_ids": ["coverage-scenario-a", "coverage-scenario-b"],
+            "scenario_set_version": "sa-banking-v1"
+        })
+        self.assertEqual(response.status_code, 200)
+        record = response.json()
+        self.assertEqual(record["status"], "hold_for_repair")
+        self.assertEqual(record["required_scenario_ids"], ["coverage-scenario-a", "coverage-scenario-b"])
+        self.assertEqual(record["missing_scenario_ids"], ["coverage-scenario-b"])
+        self.assertIn("REQUIRED_SCENARIO_COVERAGE_INCOMPLETE", record["reason_codes"])
+
 if __name__ == "__main__":
     unittest.main()
