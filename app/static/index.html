@@ -30,12 +30,11 @@
    </div>
    <div class="preview" aria-label="Illustrative evidence dashboard">
     <div class="preview-top"><div><div class="eyebrow">Release record preview</div><div class="preview-title" style="margin-top:6px">Customer-service agent · Sandbox</div></div><span class="pill">EVIDENCE FIRST</span></div>
-    <div class="metric-grid"><div class="metric"><small>Checks run</small><strong>04</strong></div><div class="metric"><small>Evidence links</small><strong>03</strong></div><div class="metric"><small>Open gaps</small><strong style="color:#ffc66b">01</strong></div></div>
-    <div class="trace"><div class="trace-head"><span>Illustrative evidence chain</span><span style="color:#8fa7b8;font-weight:500">NOT CUSTOMER DATA</span></div>
-     <div class="trace-row"><span class="trace-icon">1</span><span>Workflow configuration identified</span><span style="color:#70e1b1">Recorded</span></div>
-     <div class="trace-row"><span class="trace-icon">2</span><span>Policy expectation evaluated</span><span style="color:#70e1b1">Checked</span></div>
-     <div class="trace-row"><span class="trace-icon">3</span><span>Action outcome evidence</span><span class="trace-status">Gap found</span></div>
-     <div class="trace-row"><span class="trace-icon">4</span><span>Release decision record</span><span style="color:#9fb5c4">Pending review</span></div>
+    <div class="metric-grid"><div class="metric"><small>Evaluation mode</small><strong style="font-size:16px">Rules</strong></div><div class="metric"><small>Reference judge</small><strong style="font-size:16px">Lexical</strong></div><div class="metric"><small>Persistence</small><strong style="font-size:16px;color:#ffc66b">Memory</strong></div></div>
+    <div class="trace"><div class="trace-head"><span>What this build actually does</span><span style="color:#8fa7b8;font-weight:500">CURRENT BUILD</span></div>
+     <div class="trace-row"><span class="trace-icon">1</span><span>Configured phrase and disclosure checks</span><span style="color:#70e1b1">Implemented</span></div>
+     <div class="trace-row"><span class="trace-icon">2</span><span>Lexical-overlap reference evaluation</span><span class="trace-status">Limited</span></div>
+     <div class="trace-row"><span class="trace-icon">3</span><span>Persistent, tenant-isolated records</span><span class="trace-status">Not built</span></div>
     </div>
    </div>
   </div>
@@ -84,6 +83,10 @@
    <div id="result" class="result" aria-live="polite">
     <div class="result-head"><div><h4 id="resultTitle">Test result</h4><p id="resultSub"></p></div><span id="severity" class="severity">Pending</span></div>
     <div class="result-body"><div id="findings"></div>
+     <div id="judgeEvidence" class="trace" style="margin-top:14px;display:none">
+      <div class="trace-head"><span>Reference evaluator details</span><span class="tag">NOT AN LLM JUDGE</span></div>
+      <div id="judgeMetrics"></div>
+     </div>
      <div class="locked">
       <div class="lock-head"><span>🔒</span><span>Complete evidence report</span><span class="tag">PAID TIER</span></div>
       <div class="lock-blur">Detailed evidence chain · Reproducibility record · Remediation plan · Retest checklist · Exportable Release Record</div>
@@ -168,7 +171,19 @@ function renderResult(r){
   html+='<div class="finding"><span class="finding-mark '+(passed?'':'bad')+'">'+(passed?'✓':'!')+'</span><div><strong>'+safeText(c.rule.replaceAll('_',' '))+' · '+(passed?'PASS':'FLAG')+'</strong><br><span style="color:#718498">'+safeText(c.detail|| (passed?'Configured check passed.':'Configured check did not pass.'))+'</span></div></div>';
  });
  $('findings').innerHTML=html;
- $('limits').textContent='Limitations: this test evaluates one supplied response using the current reference engine. It does not test the connected AI system, prove a real action occurred, detect all semantic or Arabic dialect risks, or issue a production release approval. A “No failure detected” result is not a safety certification.';
+ const judges=r.judge_scores||[];
+ if(judges.length){
+  $('judgeEvidence').style.display='block';
+  $('judgeMetrics').innerHTML=judges.map(j=>{
+   const pct=Math.round(Number(j.groundedness||0)*100);
+   return '<div class="trace-row" style="grid-template-columns:1fr auto"><span><strong>'+safeText(j.judge_name)+'</strong><br><span style="color:#718498">'+safeText(j.reason||'No explanation returned')+'</span></span><span class="pill">'+pct+'% lexical overlap</span></div>'+
+    '<div style="font-size:10px;color:#718498;margin:7px 0 12px">Groundedness overlap: '+pct+'% · Reported severity: '+safeText(j.severity||'unknown')+'</div>';
+  }).join('');
+ } else {
+  $('judgeEvidence').style.display='none';
+  $('judgeMetrics').textContent='';
+ }
+ $('limits').textContent='Limitations: this test evaluates one supplied response using configured deterministic checks and a lexical-overlap reference evaluator, not an independent language model. It does not connect to your AI system, prove a real external action occurred, reliably understand semantic paraphrases or all Arabic dialect risks, or issue production release approval. “No failure detected” is not a safety certification. API records are held in process memory and may be lost on restart; do not submit sensitive or production data.';
  $('result').style.display='block';$('result').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 $('copyResult').addEventListener('click',async()=>{
