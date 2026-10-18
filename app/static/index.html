@@ -201,9 +201,9 @@ function renderJourney(){
 }
 loadJourney();
 $('analyticsConsent').checked=localStorage.getItem(OPTIN_KEY)==='yes';
+if($('analyticsConsent').checked)trackEvent('return_visit');
 $('analyticsConsent').addEventListener('change',()=>{
  try{localStorage.setItem(OPTIN_KEY,$('analyticsConsent').checked?'yes':'no')}catch{}
- if($('analyticsConsent').checked)trackEvent('return_visit');
 });
 let lastResult=null;
 function showError(message){$('error').textContent=message;$('error').style.display='block'}
@@ -260,7 +260,6 @@ function renderResult(r){
   const improved=summary.flagged<(base.flagged??summary.flagged)||String(summary.severity)!==String(base.severity);
   $('journeyMessage').textContent=improved?'Retest completed. The result changed from your first recorded baseline. Review both outcomes carefully; a change is not automatically proof of safety.':'Retest completed. The result did not clearly improve against your first baseline. Review the flags and decide what to change next.';
   journeyState.isRetest=false;
-  trackEvent('retest_started');
  }
  saveJourney();renderJourney();
  const severity=(r.final_severity||'none').toLowerCase();
@@ -340,7 +339,7 @@ $('createRelease').addEventListener('click',async()=>{
  }
 });
 let partnerFormStarted=false;
-$('partnerForm').addEventListener('focusin',()=>{if(!partnerFormStarted){partnerFormStarted=true;trackEvent('partner_form_started')}},{once:true});
+$('partnerForm').addEventListener('focusin',()=>{if(!partnerFormStarted){partnerFormStarted=true;trackEvent('partner_form_started')}});
 $('partnerForm').addEventListener('submit',async e=>{
  e.preventDefault();
  const err=$('partnerError'),success=$('partnerSuccess'),button=$('partnerSubmit');
