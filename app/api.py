@@ -126,14 +126,14 @@ def website():return FileResponse(Path(__file__).parent/"static"/"index.html",me
 def arabic():return FileResponse(Path(__file__).parent/"static"/"arabic.html",media_type="text/html")
 @app.post("/systems")
 def system(req:CreateSystemRequest):
-  s=AISystem(**req.dict())
+ s=AISystem(**req.dict())
  existing=_systems.get(s.system_id)
  if existing and existing.config_hash()!=s.config_hash():raise HTTPException(409,"System ID already exists with a different configuration; create a new versioned system ID.")
  d=_persist("system",s.system_id,s.system_id,s);_systems[s.system_id]=s
  return {"system_id":s.system_id,"config_hash":s.config_hash(),"persistence":"durable" if d else "memory_only"}
 @app.post("/scenarios")
 def scenario(req:CreateScenarioRequest):
-  s=ScenarioCase(**req.dict())
+ s=ScenarioCase(**req.dict())
  existing=_scenarios.get(s.scenario_id)
  if existing and existing.config_hash()!=s.config_hash() and any(t.scenario_id==s.scenario_id for t in _trial_results.values()):
   raise HTTPException(409,"Scenario is already referenced by trial evidence; create a new scenario ID for changed requirements.")
@@ -164,7 +164,7 @@ class UsageEventRequest(BaseModel):
  EVENT_NAMES={"trial_completed","release_record_created","retest_completed","partner_enquiry_started","language_switched"}
 @app.post("/usage/events",status_code=202)
 def usage_event(req:UsageEventRequest):
- if req.event_name not in UsageEventRequest.EVENT_NAMES:raise HTTPException(422,"Unknown usage event.")
+ if req.event_name not in ALLOWED_USAGE_EVENTS:raise HTTPException(422,"Unknown usage event.")
  try:uuid.UUID(req.visitor_id)
  except ValueError:raise HTTPException(422,"visitor_id must be a UUID.")
  if not _database_ready or _db_engine is None:return JSONResponse(status_code=202,content={"accepted":False,"reason":"storage_unavailable"})
