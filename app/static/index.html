@@ -106,6 +106,33 @@
   </div>
  </div>
 </section>
+<section class="section partner-section" id="partners">
+ <div class="wrap partner-grid">
+  <div><div class="kicker">Free early-access collaboration</div><h2>Help shape the test lab with real workflow experience.</h2>
+   <p class="lead">We are inviting design partners, technical evaluators, and research collaborators to try the current sandbox, challenge its limits, and tell us where evidence could change a release decision.</p>
+   <div class="check-list">
+    <div class="check-item"><b>✓</b><span><strong>Free during validation.</strong> No payment details or buying commitment.</span></div>
+    <div class="check-item"><b>✓</b><span>Share synthetic test cases or general workflow feedback.</span></div>
+    <div class="check-item"><b>!</b><span>Do not submit production data, customer records, credentials, or confidential material.</span></div>
+   </div>
+   <p class="notice">Submitting this form requests contact about early access. It does not create a partnership agreement or certify the sandbox for regulated production data.</p>
+  </div>
+  <div class="partner-card"><div class="lab-card-head"><div><h3>Become a design partner</h3><p>Tell us what you would like to test.</p></div><span class="tag">FREE · EARLY ACCESS</span></div>
+   <form id="partnerForm">
+    <div class="field-row"><div class="field"><label for="partnerName">Full name</label><input id="partnerName" required minlength="2" maxlength="120" autocomplete="name"></div><div class="field"><label for="partnerEmail">Email</label><input id="partnerEmail" type="email" required maxlength="254" autocomplete="email"></div></div>
+    <div class="field-row"><div class="field"><label for="partnerOrg">Organization</label><input id="partnerOrg" required minlength="2" maxlength="160"></div><div class="field"><label for="partnerRole">Role</label><input id="partnerRole" required minlength="2" maxlength="120" placeholder="e.g. AI engineer"></div></div>
+    <div class="field-row"><div class="field"><label for="partnerJurisdiction">Main market</label><select id="partnerJurisdiction" required><option value="">Select one</option><option>Saudi Arabia</option><option>United Arab Emirates</option><option>Other GCC</option><option>Africa</option><option>Europe</option><option>North America</option><option>Asia-Pacific</option><option>Global / multiple markets</option></select></div>
+    <div class="field"><label for="partnerWorkflow">AI workflow</label><select id="partnerWorkflow" required><option value="">Select one</option><option>Customer support / service</option><option>Financial services</option><option>Healthcare administration</option><option>Internal enterprise assistant</option><option>Agent / tool-using workflow</option><option>Arabic or bilingual AI</option><option>AI evaluation / research</option><option>Other</option></select></div></div>
+    <div class="field"><label for="partnerInvolvement">How would you contribute?</label><select id="partnerInvolvement" required><option value="">Select one</option><option value="design_partner">Design partner — test and give feedback</option><option value="technical_evaluator">Technical evaluator — inspect results</option><option value="research_collaborator">Research collaborator — validate methods</option><option value="other">Other</option></select></div>
+    <div class="field"><label for="partnerProblem">What failure or release decision would you want to test?</label><textarea id="partnerProblem" required minlength="20" maxlength="3000" placeholder="Describe the problem in general terms. Do not include confidential examples or personal data."></textarea></div>
+    <div class="honeypot" aria-hidden="true"><label for="partnerWebsite">Leave blank</label><input id="partnerWebsite" tabindex="-1" autocomplete="off"></div>
+    <label class="consent"><input id="partnerConsent" type="checkbox" required><span>I agree that Mubayyin may store these details and contact me about this early-access enquiry. I understand this is not a commercial agreement.</span></label>
+    <div id="partnerError" class="error" role="alert"></div><button class="btn btn-dark" id="partnerSubmit" type="submit">Request free early access ↗</button>
+    <p class="notice">Your enquiry is confirmed only if the server successfully saves it. Submitted contact details are not displayed publicly.</p><div id="partnerSuccess" class="partner-success" role="status"></div>
+   </form>
+  </div>
+ </div>
+</section>
 <section class="section" id="evidence">
  <div class="wrap">
   <div class="section-head"><div class="kicker">Designed for inspectability</div><h2>What the current engine can—and cannot—prove.</h2><p class="lead">Trust begins with clear boundaries. The public test lab uses the current deterministic checks and a simple reference evaluator; it is not a production certification or a substitute for expert review.</p></div>
