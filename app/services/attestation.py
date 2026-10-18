@@ -22,16 +22,18 @@ def canonical_json(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def create_release_bundle(record: dict[str, Any], signing_key: str | None = None) -> dict[str, Any]:
+def create_release_bundle(record: dict[str, Any], evidence: dict[str, Any] | None = None, signing_key: str | None = None) -> dict[str, Any]:
     """Create an integrity-checked export; sign only when a key is configured."""
     payload = dict(record)
     payload.pop("persistence", None)
-    digest = hashlib.sha256(canonical_json(payload)).hexdigest()
+    evidence_payload = dict(evidence or {})
+    digest = hashlib.sha256(canonical_json({"record": payload, "evidence": evidence_payload})).hexdigest()
     key = signing_key if signing_key is not None else os.getenv("MUBAYYIN_ATTESTATION_KEY", "")
     signature = hmac.new(key.encode("utf-8"), digest.encode("ascii"), hashlib.sha256).hexdigest() if key else None
     return {
         "schema_version": SCHEMA_VERSION,
         "record": payload,
+        "evidence": evidence_payload,
         "integrity": {
             "payload_hash_algorithm": "sha256",
             "payload_hash": digest,
@@ -47,15 +49,16 @@ def verify_release_bundle(bundle: dict[str, Any], signing_key: str | None = None
         return _invalid("unsupported_schema", "Unsupported or missing bundle schema.")
     record = bundle.get("record")
     integrity = bundle.get("integrity")
-    if not isinstance(record, dict) or not isinstance(integrity, dict):
-        return _invalid("malformed_bundle", "Bundle must contain a record object and integrity object.")
+    evidence = bundle.get("evidence", {})
+    if not isinstance(record, dict) or not isinstance(evidence, dict) or not isinstance(integrity, dict):
+        return _invalid("malformed_bundle", "Bundle must contain record, evidence, and integrity objects.")
     if integrity.get("payload_hash_algorithm") != "sha256":
         return _invalid("unsupported_hash_algorithm", "Only SHA-256 payload hashes are supported.")
     supplied_hash = integrity.get("payload_hash")
     if not isinstance(supplied_hash, str) or len(supplied_hash) != 64:
         return _invalid("malformed_hash", "Payload hash must be a 64-character SHA-256 hex digest.")
     try:
-        computed_hash = hashlib.sha256(canonical_json(record)).hexdigest()
+        computed_hash = hashlib.sha256(canonical_json({"record": record, "evidence": evidence})).hexdigest()
     except (TypeError, ValueError):
         return _invalid("malformed_record", "Record cannot be serialized as canonical JSON.")
     hash_valid = hmac.compare_digest(computed_hash, supplied_hash.lower())
