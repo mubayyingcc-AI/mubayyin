@@ -113,6 +113,20 @@ def run_trial_endpoint(req: RunTrialRequest):
         "final_severity": result.final_severity.value,
         "is_failure": result.is_failure(),
         "deterministic_checks": [c.__dict__ for c in result.deterministic_checks],
+        "judge_scores": [
+            {
+                "judge_name": score.judge_name,
+                "groundedness": score.groundedness,
+                "policy_adherence": score.policy_adherence,
+                "language_quality": score.language_quality,
+                "escalation_quality": score.escalation_quality,
+                "privacy_behavior": score.privacy_behavior,
+                "severity": score.severity.value,
+                "reason": score.reason,
+            }
+            for score in result.judge_scores
+        ],
+        "system_config_hash": result.system_config_hash,
     }
 
 
