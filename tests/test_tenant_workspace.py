@@ -18,6 +18,7 @@ class DurableTenantWorkspaceTests(unittest.TestCase):
             "_database_error": api_module._database_error,
             "DATABASE_URL": api_module.DATABASE_URL,
             "PARTNER_ADMIN_TOKEN": api_module.PARTNER_ADMIN_TOKEN,
+            "TENANT_ADMIN_TOKEN": api_module.TENANT_ADMIN_TOKEN,
         }
         self.engine = create_engine(
             "sqlite://",
@@ -49,7 +50,7 @@ class DurableTenantWorkspaceTests(unittest.TestCase):
         api_module._database_ready = True
         api_module._database_error = None
         api_module.DATABASE_URL = "sqlite://test"
-        api_module.PARTNER_ADMIN_TOKEN = "unit-test-admin-token"
+        api_module.TENANT_ADMIN_TOKEN = "unit-test-admin-token"
         self.key_patch = patch.dict(os.environ, {"MUBAYYIN_ATTESTATION_KEY": ""})
         self.key_patch.start()
         self.addCleanup(self.key_patch.stop)
@@ -63,6 +64,7 @@ class DurableTenantWorkspaceTests(unittest.TestCase):
         api_module._database_error = self.originals["_database_error"]
         api_module.DATABASE_URL = self.originals["DATABASE_URL"]
         api_module.PARTNER_ADMIN_TOKEN = self.originals["PARTNER_ADMIN_TOKEN"]
+        api_module.TENANT_ADMIN_TOKEN = self.originals["TENANT_ADMIN_TOKEN"]
 
     def _provision(self, name):
         response = self.client.post(
