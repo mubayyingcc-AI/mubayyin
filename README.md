@@ -28,7 +28,7 @@ What the demo proves:
 - Every record carries a `config_hash` (exactly what was tested) and an
   `evidence_hash` (what the result was), so it's reproducible.
 
-## What needs you to run it locally (not testable in the build sandbox — no network there)
+## Run locally for a manual integration check
 
 ```bash
 pip install -r requirements.txt
@@ -36,24 +36,19 @@ uvicorn app.api:app --reload
 # open http://127.0.0.1:8000/docs
 ```
 
-This wraps the same, already-tested `app/models` and `app/services` code in
-a real HTTP API (`/systems`, `/scenarios`, `/trials`, `/trials/{id}/review`,
-`/releases`). It uses standard, well-established FastAPI patterns, but I
-could not execute it myself in this sandbox because it has no network
-access to `pip install` — so treat it as "should work, verify on your
-machine," not "proven," until you've run it.
+This wraps the tested `app/models` and `app/services` code in a FastAPI API (`/systems`, `/scenarios`, `/trials`, `/trials/{id}/review`, `/releases`). GitHub Actions runs API and public website tests. PostgreSQL persistence is conditional on `DATABASE_URL`; startup restoration and durable end-to-end evidence still require a live database restart/restore test before broad external use.
 
 ## What is deliberately NOT built yet (and why)
 
 Per the strategy doc's validation gates — none of this should be built
 before you have paying pilots and a changed production decision:
 
-- Persistent database (currently in-memory; swap for Postgres)
+- Full production data isolation and tenant-scoped authorization (Postgres persistence is implemented when `DATABASE_URL` is configured; the startup restore path still needs a real restart/restore test)
 - Real LLM judge (currently a transparent lexical-overlap stand-in in
   `app/services/evaluator.py::reference_judge` — replace with an actual
   model call behind the same `JudgeFn` signature, and add a second,
   independent judge before trusting disagreement checks)
-- Auth, tenant isolation, CI/CD webhooks, drift watch, SDKs
+- Production-grade authentication and tenant isolation, CI/CD webhooks, drift watch, SDKs
 - Any of the "10 organizations use this scenario library" scale — this
   scaffold ships with 10 illustrative scenarios, not a production library
 
