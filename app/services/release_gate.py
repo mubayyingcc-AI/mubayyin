@@ -45,7 +45,7 @@ class ReleaseThresholds:
     require_human_signoff_above_major: bool = True
 
 
-def _evidence_hash(system: AISystem, results: list[TrialResult]) -> str:
+def _evidence_hash(system: AISystem, results: list[TrialResult], required_scenario_ids: list[str] | None = None) -> str:
     """Bind the release to exact outputs, configured checks, and human review."""
     evidence = []
     for result in sorted(results, key=lambda item: item.result_id):
@@ -74,7 +74,7 @@ def _evidence_hash(system: AISystem, results: list[TrialResult]) -> str:
                 "reviewed_at": result.human_review.reviewed_at,
             },
         })
-    payload = json.dumps({"system_config_hash": system.config_hash(), "trial_evidence": evidence}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    payload = json.dumps({"system_config_hash": system.config_hash(), "required_scenario_ids": sorted(set(required_scenario_ids or [])), "trial_evidence": evidence}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 def decide_release(
@@ -84,7 +84,11 @@ def decide_release(
     approver: str | None,
     previous_record_hash: str | None = None,
     scenario_set_version: str = "v1",
+    required_scenario_ids: list[str] | None = None,
 ) -> ReleaseRecord:
+    required_ids = sorted(set(required_scenario_ids or []))
+    covered_ids = {result.scenario_id for result in results}
+    missing_ids = sorted(set(required_ids) - covered_ids)
     critical = sum(1 for r in results if r.is_critical_failure())
     major = sum(1 for r in results if r.is_failure() and not r.is_critical_failure())
     minor = sum(
@@ -96,7 +100,11 @@ def decide_release(
     conditions: list[str] = []
     reason_codes: list[str] = []
 
-    if critical > thresholds.max_critical_failures:
+    if missing_ids:
+        status = ReleaseStatus.HOLD_FOR_REPAIR
+        conditions.append("Required scenario coverage is incomplete; run the missing scenarios before release.")
+        reason_codes.append("REQUIRED_SCENARIO_COVERAGE_INCOMPLETE")
+    elif critical > thresholds.max_critical_failures:
         status = ReleaseStatus.HOLD_FOR_REPAIR
         conditions.append(f"{critical} critical failure(s) must be remediated before release.")
         reason_codes.append(ReasonCode.CRITICAL_FAILURE_PRESENT.value)
@@ -134,8 +142,10 @@ def decide_release(
         conditions=conditions,
         reason_codes=reason_codes,
         approver=approver,
-        evidence_hash=_evidence_hash(system, results),
+        evidence_hash=_evidence_hash(system, results, required_ids),
         previous_record_hash=previous_record_hash,
         trial_result_ids=sorted(r.result_id for r in results),
+        required_scenario_ids=required_ids,
+        missing_scenario_ids=missing_ids,
     )
     return record
