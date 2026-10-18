@@ -417,6 +417,17 @@ def create_system(req: CreateSystemRequest):
 @app.post("/scenarios")
 def create_scenario(req: CreateScenarioRequest):
     scenario = ScenarioCase(**req.dict())
+    existing = _scenarios.get(scenario.scenario_id)
+    if existing and existing.config_hash() != scenario.config_hash():
+        affected_results = [
+            result_id for result_id, result in _trial_results.items()
+            if result.scenario_id == scenario.scenario_id
+        ]
+        if affected_results:
+            raise HTTPException(
+                status_code=409,
+                detail="scenario is referenced by existing trial evidence; create a new scenario_id for the revised policy or expected behavior so previous evidence remains interpretable",
+            )
     durable = _persist_evidence("scenario", scenario.scenario_id, "scenario:" + scenario.scenario_id, scenario)
     _scenarios[scenario.scenario_id] = scenario
     return {"scenario_id": scenario.scenario_id, "persistence": "durable" if durable else "memory_only"}
