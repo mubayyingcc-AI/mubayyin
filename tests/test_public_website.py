@@ -14,6 +14,7 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertIn("Mubayyin", response.text)
         self.assertIn("Release Assurance Test Lab", response.text)
         self.assertIn("Download Release Record bundle", response.text)
+        self.assertIn('href="/workspace"', response.text)
         self.assertIn('id="partnerForm"', response.text)
         self.assertIn("Request free early access", response.text)
         self.assertIn('id="journeyPanel"', response.text)
@@ -210,6 +211,7 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertIn("/trials", response.text)
         self.assertIn("/releases", response.text)
         self.assertIn("تنزيل حزمة سجل الإطلاق", response.text)
+        self.assertIn('href="/workspace"', response.text)
 
     def test_readiness_endpoint_reports_storage_mode(self):
         response = self.client.get("/ready")
@@ -517,6 +519,16 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertEqual(release.status_code, 200)
         response = second.get(f'/releases/{release.json()["record_id"]}/export')
         self.assertEqual(response.status_code, 404)
+
+
+    def test_private_workspace_page_is_served_and_uses_tab_session_storage(self):
+        response = self.client.get("/workspace")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Release Assurance Workspace", response.text)
+        self.assertIn("sessionStorage", response.text)
+        self.assertIn("/tenant/systems", response.text)
+        self.assertIn("/tenant/releases", response.text)
+        self.assertIn("not a certification", response.text)
 
 if __name__ == "__main__":
     unittest.main()
