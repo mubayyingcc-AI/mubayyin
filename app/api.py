@@ -161,10 +161,10 @@ def review(result_id:str,req:HumanReviewRequest):
  d=_persist("trial",r.result_id,_trial_system_ids.get(r.result_id,""),r)
  return {"result_id":r.result_id,"review_saved":True,"persistence":"durable" if d else "memory_only"}
 
+ALLOWED_USAGE_EVENTS={"trial_completed","release_record_created","retest_completed","partner_enquiry_started","language_switched"}
 class UsageEventRequest(BaseModel):
  visitor_id:str=Field(min_length=36,max_length=36)
  event_name:str
- EVENT_NAMES={"trial_completed","release_record_created","retest_completed","partner_enquiry_started","language_switched"}
 @app.post("/usage/events",status_code=202)
 def usage_event(req:UsageEventRequest):
  if req.event_name not in ALLOWED_USAGE_EVENTS:raise HTTPException(422,"Unknown usage event.")
