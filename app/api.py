@@ -1,22 +1,16 @@
 """
-Mubayyin HTTP API — thin FastAPI wrapper around the verified core engine
-in app/models and app/services. In-memory store for this scaffold; swap
-StorageBackend for a real Postgres-backed one (see NOTES.md) before any
-real customer data touches this.
-
-NOT executed inside the build sandbox (no network access there to
-install FastAPI) — run it yourself:
-
-    pip install -r requirements.txt
-    uvicorn app.api:app --reload
-
-Then open http://127.0.0.1:8000/docs for interactive API docs.
+Mubayyin HTTP API — verified core engine plus the public test-lab website.
+The current API stores records in memory; do not submit confidential or
+production customer data until persistence, access controls, and tenant
+isolation have been implemented and reviewed.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.models.core import AISystem, ScenarioCase, HumanReview, Severity
@@ -26,14 +20,14 @@ from app.services.release_gate import decide_release, ReleaseThresholds
 app = FastAPI(
     title="Mubayyin Release Assurance API",
     description="Vendor-neutral AI release-assurance engine — GCC beachhead.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
-# --- in-memory storage (replace with Postgres before any real customer data) ---
+# --- in-memory storage (replace with persistent, tenant-isolated storage) ---
 _systems: dict[str, AISystem] = {}
 _scenarios: dict[str, ScenarioCase] = {}
-_release_records: dict[str, list] = {}  # system_id -> [ReleaseRecord, ...] most recent last
-
+_release_records: dict[str, list] = {}
+_trial_results: dict[str, object] = {}
 
 # --- request/response schemas -------------------------------------------------
 class CreateSystemRequest(BaseModel):
@@ -85,7 +79,9 @@ class DecideReleaseRequest(BaseModel):
     scenario_set_version: str = "v1"
 
 
-_trial_results: dict[str, object] = {}  # result_id -> TrialResult
+@app.get("/", include_in_schema=False)
+def website():
+    return FileResponse(Path(__file__).parent / "static" / "index.html", media_type="text/html")
 
 
 @app.post("/systems")
@@ -146,7 +142,6 @@ def create_release(req: DecideReleaseRequest):
 
     history = _release_records.setdefault(req.system_id, [])
     previous_hash = history[-1].evidence_hash if history else None
-
     record = decide_release(
         system=system,
         results=results,
@@ -172,4 +167,4 @@ def get_release_history(system_id: str):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": app.version}

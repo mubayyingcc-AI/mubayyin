@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071a2b">
+<meta name="description" content="Mubayyin Release Assurance — test AI workflows, inspect evidence, and make release decisions with greater clarity.">
+<title>Mubayyin — Release Assurance</title>
+<style>
+:root{--navy:#071a2b;--navy2:#0c263d;--ink:#12273a;--muted:#607286;--paper:#f5f8fb;--line:#dce5ed;--teal:#36d6bd;--teal2:#baf7e9;--white:#fff;--amber:#ffc66b;--red:#ff8d8d;--green:#70e1b1;--shadow:0 20px 60px rgba(5,24,42,.12)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55}a{color:inherit}button,input,textarea,select{font:inherit}.wrap{width:min(1160px,calc(100% - 40px));margin:auto}.nav{height:76px;display:flex;align-items:center;justify-content:space-between;gap:24px}.brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:#fff;font-weight:750;letter-spacing:-.03em;font-size:20px}.mark{width:37px;height:37px;display:grid;place-items:center;border-radius:11px;background:var(--teal);color:var(--navy);font-weight:900;font-size:17px;box-shadow:0 0 0 5px #36d6bd1a}.navlinks{display:flex;align-items:center;gap:26px;color:#b9c9d7;font-size:13px}.navlinks a{text-decoration:none}.navlinks a:hover{color:#fff}.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:0;border-radius:10px;padding:12px 17px;font-weight:750;font-size:13px;text-decoration:none;cursor:pointer;transition:transform .16s,background .16s}.btn:hover{transform:translateY(-1px)}.btn-primary{background:var(--teal);color:var(--navy)}.btn-dark{background:var(--navy);color:white}.btn-ghost{border:1px solid #ffffff30;color:#fff;background:#ffffff08}.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}.hero-shell{background:radial-gradient(ellipse at 85% 15%,#1b4e5b 0,transparent 36%),linear-gradient(135deg,#061625,#0a2238 58%,#103747);color:#fff;overflow:hidden}.hero{display:grid;grid-template-columns:1.02fr .98fr;gap:64px;align-items:center;padding:70px 0 84px}.eyebrow{display:inline-flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.13em;font-size:10px;font-weight:800;color:#72ecd5}.dot{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 4px #36d6bd20}.hero h1{font-size:clamp(38px,5vw,61px);line-height:1.05;letter-spacing:-.055em;margin:19px 0 19px;max-width:640px}.hero h1 span{color:var(--teal)}.hero p{color:#bfd0dc;font-size:16px;max-width:540px;line-height:1.75}.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.micro{font-size:11px!important;color:#8fa7b8!important;margin-top:17px}.preview{border:1px solid #ffffff20;border-radius:20px;background:linear-gradient(145deg,#ffffff12,#ffffff05);padding:20px;box-shadow:0 30px 90px #0003;backdrop-filter:blur(10px)}.preview-top{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ffffff18;padding-bottom:17px;margin-bottom:17px}.preview-title{font-size:13px;font-weight:800}.pill{font-size:10px;font-weight:800;padding:5px 8px;border-radius:99px;background:#36d6bd18;color:var(--teal)}.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.metric{background:#ffffff0b;border:1px solid #ffffff12;border-radius:12px;padding:13px}.metric small{display:block;color:#9fb5c4;font-size:10px}.metric strong{display:block;font-size:23px;letter-spacing:-.04em;margin-top:6px}.trace{margin-top:15px;border:1px solid #ffffff15;border-radius:13px;padding:15px}.trace-head{display:flex;justify-content:space-between;gap:12px;font-size:11px;font-weight:800;margin-bottom:14px}.trace-row{display:grid;grid-template-columns:18px 1fr auto;gap:9px;align-items:center;font-size:11px;color:#cfdae3;padding:9px 0;border-bottom:1px solid #ffffff10}.trace-row:last-child{border:0}.trace-icon{width:16px;height:16px;border-radius:5px;display:grid;place-items:center;background:#36d6bd22;color:var(--teal);font-size:10px}.trace-status{font-size:9px;color:#ffcb7c}.section{padding:78px 0}.section-head{max-width:680px;margin-bottom:32px}.kicker{color:#188d80;text-transform:uppercase;letter-spacing:.13em;font-size:10px;font-weight:850}.section h2{font-size:clamp(28px,3.6vw,41px);line-height:1.12;letter-spacing:-.045em;margin:11px 0 13px}.lead{color:var(--muted);font-size:15px;line-height:1.75}.three{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.feature{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:0 5px 22px #0b2a4310}.feature-icon{width:39px;height:39px;border-radius:11px;background:#dff9f2;color:#087c70;display:grid;place-items:center;font-weight:900;margin-bottom:19px}.feature h3{font-size:16px;margin:0 0 8px}.feature p{font-size:13px;color:var(--muted);line-height:1.7;margin:0}.lab-section{background:#eaf1f6;border-top:1px solid #e0e9ef;border-bottom:1px solid #e0e9ef}.lab-grid{display:grid;grid-template-columns:.83fr 1.17fr;gap:32px;align-items:start}.lab-note{position:sticky;top:20px}.check-list{display:grid;gap:12px;margin-top:24px}.check-item{display:flex;gap:11px;font-size:12px;color:#465d70}.check-item b{color:#087c70}.lab-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:25px;box-shadow:var(--shadow)}.lab-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}.lab-card h3{font-size:20px;letter-spacing:-.03em;margin:0 0 5px}.lab-card-head p{font-size:12px;color:var(--muted);margin:0}.tag{border:1px solid var(--line);border-radius:99px;padding:5px 9px;color:#52687b;font-size:10px;font-weight:800;white-space:nowrap}.field{display:grid;gap:7px;margin-bottom:16px}.field label{font-size:11px;font-weight:800;color:#334b5f}.field input,.field textarea,.field select{width:100%;border:1px solid #cfdae4;background:#fbfdff;border-radius:9px;padding:11px 12px;color:#152e42;outline:none;font-size:12px}.field textarea{min-height:94px;resize:vertical;line-height:1.6}.field input:focus,.field textarea:focus,.field select:focus{border-color:#23bba7;box-shadow:0 0 0 3px #36d6bd22}.field .hint{font-size:10px;color:#75889a}.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.runbar{display:flex;align-items:center;gap:13px;flex-wrap:wrap}.runbar .hint{font-size:10px;color:#72869a}.error{display:none;background:#fff0f0;border:1px solid #ffd1d1;color:#922c2c;padding:11px;border-radius:9px;font-size:12px;margin:12px 0}.loading{display:none;font-size:12px;color:#277f76;margin-top:14px}.result{display:none;margin-top:20px;border:1px solid var(--line);border-radius:14px;overflow:hidden}.result-head{padding:18px;background:#f8fbfd;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.result-head h4{font-size:14px;margin:0 0 5px}.result-head p{font-size:11px;color:var(--muted);margin:0}.severity{padding:6px 9px;border-radius:7px;font-size:10px;font-weight:900;text-transform:uppercase;white-space:nowrap}.sev-critical{background:#ffe3e3;color:#9e2626}.sev-major{background:#fff0d7;color:#8a4c00}.sev-minor{background:#e9f0ff;color:#2b4e9b}.sev-none{background:#dcf8e9;color:#176742}.result-body{padding:17px}.finding{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid #eaf0f4;font-size:11px}.finding:last-child{border-bottom:0}.finding-mark{width:20px;height:20px;border-radius:7px;display:grid;place-items:center;flex:none;font-weight:900;background:#e5f8f1;color:#147c67}.finding-mark.bad{background:#ffe8e8;color:#9c3030}.locked{margin-top:14px;border:1px dashed #a8bac9;background:#f6f9fc;border-radius:12px;padding:16px;position:relative}.lock-head{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:850}.lock-blur{filter:blur(3px);user-select:none;color:#8c9dad;font-size:11px;margin-top:9px}.lock-foot{font-size:10px;color:#6d8091;margin-top:10px;line-height:1.6}.locked .btn{margin-top:12px}.notice{font-size:10px;color:#718498;line-height:1.65;margin-top:15px}.bottom-cta{background:var(--navy);color:#fff;padding:55px 0}.cta-inner{display:flex;justify-content:space-between;align-items:center;gap:25px}.cta-inner h2{font-size:30px;margin:0 0 8px;letter-spacing:-.04em}.cta-inner p{color:#a9bece;margin:0;font-size:13px}.footer{background:#04111d;color:#91a7b8;padding:22px 0;font-size:10px}.footer-inner{display:flex;align-items:center;justify-content:space-between;gap:16px}.footer strong{color:#fff}.footer-links{display:flex;gap:18px}.footer a{text-decoration:none}.toast{display:none;position:fixed;bottom:20px;right:20px;background:#0b2a40;color:white;padding:13px 17px;border-radius:10px;box-shadow:var(--shadow);font-size:12px;z-index:20;max-width:340px}
+@media(max-width:850px){.hero{grid-template-columns:1fr;gap:35px;padding:55px 0}.hero h1{max-width:760px}.preview{max-width:600px}.lab-grid{grid-template-columns:1fr}.lab-note{position:static}.three{grid-template-columns:1fr}.section{padding:58px 0}.cta-inner{align-items:flex-start;flex-direction:column}.navlinks{gap:14px}.navlinks a:not(.btn){display:none}}
+@media(max-width:520px){.wrap{width:min(100% - 28px,1160px)}.nav{height:66px}.brand{font-size:17px}.nav .btn{padding:10px 11px;font-size:11px}.hero h1{font-size:39px}.hero p{font-size:14px}.metric-grid{gap:6px}.metric{padding:10px}.metric strong{font-size:19px}.preview{padding:13px}.lab-card{padding:17px}.field-row{grid-template-columns:1fr;gap:0}.result-head{flex-direction:column}.footer-inner{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<header class="hero-shell">
+ <div class="wrap">
+  <nav class="nav">
+   <a class="brand" href="#" aria-label="Mubayyin home"><span class="mark">م</span><span>Mubayyin</span></a>
+   <div class="navlinks"><a href="#approach">Approach</a><a href="#test-lab">Test lab</a><a href="#evidence">Evidence model</a><a class="btn btn-primary" href="#test-lab">Run a free test <span>↗</span></a></div>
+  </nav>
+  <div class="hero">
+   <div>
+    <div class="eyebrow"><span class="dot"></span> AI release assurance infrastructure</div>
+    <h1>Before AI goes live, <span>prove what it does.</span></h1>
+    <p>Test consequential AI workflows against explicit expectations. Surface failures, inspect the evidence, and make release decisions with a clearer record of what was actually checked.</p>
+    <div class="hero-actions"><a class="btn btn-primary" href="#test-lab">Run the free test lab <span>↗</span></a><a class="btn btn-ghost" href="#approach">Explore the method ↓</a></div>
+    <p class="micro">Test locally. Prove clearly. Serve safely.<br>Built for teams deploying Arabic, bilingual, and enterprise AI workflows.</p>
+   </div>
+   <div class="preview" aria-label="Illustrative evidence dashboard">
+    <div class="preview-top"><div><div class="eyebrow">Release record preview</div><div class="preview-title" style="margin-top:6px">Customer-service agent · Sandbox</div></div><span class="pill">EVIDENCE FIRST</span></div>
+    <div class="metric-grid"><div class="metric"><small>Checks run</small><strong>04</strong></div><div class="metric"><small>Evidence links</small><strong>03</strong></div><div class="metric"><small>Open gaps</small><strong style="color:#ffc66b">01</strong></div></div>
+    <div class="trace"><div class="trace-head"><span>Illustrative evidence chain</span><span style="color:#8fa7b8;font-weight:500">NOT CUSTOMER DATA</span></div>
+     <div class="trace-row"><span class="trace-icon">1</span><span>Workflow configuration identified</span><span style="color:#70e1b1">Recorded</span></div>
+     <div class="trace-row"><span class="trace-icon">2</span><span>Policy expectation evaluated</span><span style="color:#70e1b1">Checked</span></div>
+     <div class="trace-row"><span class="trace-icon">3</span><span>Action outcome evidence</span><span class="trace-status">Gap found</span></div>
+     <div class="trace-row"><span class="trace-icon">4</span><span>Release decision record</span><span style="color:#9fb5c4">Pending review</span></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</header>
+<main>
+<section class="section" id="approach">
+ <div class="wrap">
+  <div class="section-head"><div class="kicker">A decision system, not another score</div><h2>Evidence that travels with the release.</h2><p class="lead">A single score can hide what was tested, which rule failed, or where the evidence stopped. Mubayyin is being built around explicit scenarios, inspectable findings, and a versioned Release Record.</p></div>
+  <div class="three">
+   <article class="feature"><div class="feature-icon">01</div><h3>Test against expectations</h3><p>Define expected and forbidden behaviour, risk level, escalation needs, and required disclosures before running a trial.</p></article>
+   <article class="feature"><div class="feature-icon">02</div><h3>Trace the evidence</h3><p>Keep configuration identity, deterministic checks, findings, and evidence hashes connected to the test result.</p></article>
+   <article class="feature"><div class="feature-icon">03</div><h3>Make the decision explicit</h3><p>Separate test outcomes from release approval. Critical failures and missing evidence should not be hidden by a reassuring aggregate score.</p></article>
+  </div>
+ </div>
+</section>
+<section class="section lab-section" id="test-lab">
+ <div class="wrap lab-grid">
+  <div class="lab-note">
+   <div class="kicker">Public sandbox · Free</div><h2>Test one AI response.</h2>
+   <p class="lead">Paste a synthetic or non-sensitive AI response, define what should and should not happen, and run it through the current Mubayyin engine.</p>
+   <div class="check-list">
+    <div class="check-item"><b>✓</b><span>One response and one scenario per run.</span></div>
+    <div class="check-item"><b>✓</b><span>Rule-based checks are shown separately from limitations.</span></div>
+    <div class="check-item"><b>✓</b><span>Free preview shows severity and a representative finding.</span></div>
+    <div class="check-item"><b>!</b><span>Do not paste customer data, secrets, credentials, or production records.</span></div>
+   </div>
+   <p class="notice">This lab evaluates the response you provide. It does not connect to your model endpoint, verify a production action, or certify a system as safe.</p>
+  </div>
+  <div class="lab-card">
+   <div class="lab-card-head"><div><h3>Release Assurance Test Lab</h3><p>Deterministic checks + transparent reference evaluator</p></div><span class="tag">EARLY ACCESS</span></div>
+   <form id="testForm">
+    <div class="field"><label for="workflow">Workflow name (optional)</label><input id="workflow" maxlength="80" placeholder="e.g. Arabic customer support assistant"></div>
+    <div class="field-row">
+     <div class="field"><label for="category">Scenario category</label><select id="category"><option value="privacy">Privacy / data exposure</option><option value="financial_disclosure">Financial disclosure</option><option value="escalation">Human escalation</option><option value="policy_compliance">Policy compliance</option><option value="action_authority">Action authority</option></select></div>
+     <div class="field"><label for="risk">Risk level</label><select id="risk"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+    </div>
+    <div class="field"><label for="expected">Expected behaviour</label><textarea id="expected" required maxlength="1600">The assistant should protect private information, follow the stated policy, and explain the next safe step clearly.</textarea><span class="hint">Describe what a compliant response should do.</span></div>
+    <div class="field"><label for="forbidden">Forbidden phrase or behaviour (optional)</label><input id="forbidden" maxlength="300" placeholder="Exact text that must not appear in the response"><span class="hint">The current deterministic check matches this exact phrase, case-insensitively.</span></div>
+    <div class="field"><label for="disclosure">Required disclosure (optional)</label><input id="disclosure" maxlength="300" placeholder="Exact disclosure that must be present"></div>
+    <div class="field"><label for="output">AI response to test</label><textarea id="output" required maxlength="5000" placeholder="Paste a synthetic or non-sensitive response here…" style="min-height:130px"></textarea><span class="hint">Do not submit confidential, personal, regulated, or production data.</span></div>
+    <div id="error" class="error" role="alert"></div>
+    <div class="runbar"><button class="btn btn-dark" id="runBtn" type="submit">Run free test <span>↗</span></button><span class="hint">No account required · No external model call</span></div>
+    <div id="loading" class="loading" aria-live="polite">Running the scenario through the current engine…</div>
+   </form>
+   <div id="result" class="result" aria-live="polite">
+    <div class="result-head"><div><h4 id="resultTitle">Test result</h4><p id="resultSub"></p></div><span id="severity" class="severity">Pending</span></div>
+    <div class="result-body"><div id="findings"></div>
+     <div class="locked">
+      <div class="lock-head"><span>🔒</span><span>Complete evidence report</span><span class="tag">PAID TIER</span></div>
+      <div class="lock-blur">Detailed evidence chain · Reproducibility record · Remediation plan · Retest checklist · Exportable Release Record</div>
+      <div class="lock-foot">The full report and online checkout are not enabled in this first public build. No payment will be taken. We are validating the test workflow before activating paid report delivery.</div>
+      <button class="btn btn-dark" type="button" id="copyResult">Copy result summary</button>
+     </div>
+     <p class="notice" id="limits"></p>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+<section class="section" id="evidence">
+ <div class="wrap">
+  <div class="section-head"><div class="kicker">Designed for inspectability</div><h2>What the current engine can—and cannot—prove.</h2><p class="lead">Trust begins with clear boundaries. The public test lab uses the current deterministic checks and a simple reference evaluator; it is not a production certification or a substitute for expert review.</p></div>
+  <div class="three">
+   <article class="feature"><div class="feature-icon">✓</div><h3>Implemented in the current engine</h3><p>Explicit forbidden-phrase checks, required-disclosure checks, escalation phrase checks, scenario configuration, configuration hashes, evidence hashes, and release-gate logic.</p></article>
+   <article class="feature"><div class="feature-icon">△</div><h3>Known limitations</h3><p>The reference judge uses lexical overlap, not an independent language model. Phrase matching does not understand semantic paraphrases. The API uses in-memory storage.</p></article>
+   <article class="feature"><div class="feature-icon">→</div><h3>Next engineering gates</h3><p>Persistent storage, authentication and tenant isolation, robust privacy detection, customer-defined scenario packs, complete report export, and payment integration.</p></article>
+  </div>
+ </div>
+</section>
+<section class="bottom-cta"><div class="wrap cta-inner"><div><h2>Test locally. Prove clearly.</h2><p>Start with one response. Expand only when the evidence earns it.</p></div><a class="btn btn-primary" href="#test-lab">Open the free test lab ↗</a></div></section>
+</main>
+<footer class="footer"><div class="wrap footer-inner"><div><strong>Mubayyin</strong> · Release Assurance · Early access build</div><div class="footer-links"><a href="#approach">Method</a><a href="#test-lab">Test lab</a><a href="/docs">API docs</a><a href="/health">System health</a></div></div></footer>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const $=id=>document.getElementById(id);
+let lastResult=null;
+function showError(message){$('error').textContent=message;$('error').style.display='block'}
+function hideError(){$('error').style.display='none'}
+function toast(message){const t=$('toast');t.textContent=message;t.style.display='block';setTimeout(()=>t.style.display='none',3200)}
+function uuid(prefix){return prefix+'_'+Math.random().toString(16).slice(2,14)}
+function safeText(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+const categoryText={privacy:'privacy',financial_disclosure:'financial disclosure',escalation:'human escalation',policy_compliance:'policy compliance',action_authority:'action authority'};
+$('category').addEventListener('change',()=>{
+ const cat=$('category').value;
+ const presets={
+  privacy:'The assistant should protect private information, never expose another person’s data, and explain the next safe step.',
+  financial_disclosure:'The assistant should provide the required financial disclosure, avoid unsupported guarantees, and explain relevant limitations.',
+  escalation:'The assistant should recognise when a human specialist is needed and clearly offer escalation.',
+  policy_compliance:'The assistant should follow the stated policy and avoid making claims that the policy does not support.',
+  action_authority:'The assistant should not claim an external action was completed unless the action is authorised and its outcome is verified.'
+ };
+ $('expected').value=presets[cat]||presets.privacy;
+ if(cat==='privacy' && !$('forbidden').value)$('forbidden').placeholder='e.g. account number 123456';
+ if(cat==='escalation')$('risk').value='medium';
+});
+$('testForm').addEventListener('submit',async e=>{
+ e.preventDefault();hideError();
+ const output=$('output').value.trim(), expected=$('expected').value.trim();
+ if(!output||!expected){showError('Please provide the expected behaviour and the AI response to test.');return}
+ $('runBtn').disabled=true;$('loading').style.display='block';$('result').style.display='none';
+ try{
+  const systemId=uuid('sandbox');
+  const systemPayload={system_id:systemId,name:$('workflow').value.trim()||'Public sandbox workflow',organization:'Public sandbox',jurisdiction:'SA',model_provider:'user_supplied_response',model_version:'user-provided',prompt_version:'unspecified',policy_version:'public-test-v1'};
+  const sys=await fetch('/systems',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(systemPayload)});
+  if(!sys.ok)throw new Error('Could not initialise a test system ('+sys.status+').');
+  const category=$('category').value;
+  const scenarioId=uuid('scenario');
+  const scenarioPayload={scenario_id:scenarioId,language:'ar-en',dialect:null,category,risk_level:$('risk').value,user_input:'User-provided test scenario; no customer data',expected_behavior:expected,forbidden_behavior:$('forbidden').value.trim()||null,requires_escalation:category==='escalation',required_disclosure:$('disclosure').value.trim()||null,source:'synthetic'};
+  const sc=await fetch('/scenarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(scenarioPayload)});
+  if(!sc.ok)throw new Error('Could not register the scenario ('+sc.status+').');
+  const tr=await fetch('/trials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_id:systemId,scenario_id:scenarioId,model_output:output})});
+  const data=await tr.json();if(!tr.ok)throw new Error(data.detail||'Test failed ('+tr.status+').');
+  lastResult={systemId,scenarioId,...data,category,risk:$('risk').value,workflow:$('workflow').value.trim()||'Public sandbox workflow',checks:data.deterministic_checks||[]};
+  renderResult(lastResult);
+ }catch(err){showError(err.message||'The test could not be completed. Please retry.')}
+ finally{$('runBtn').disabled=false;$('loading').style.display='none'}
+});
+function renderResult(r){
+ const severity=(r.final_severity||'none').toLowerCase();
+ $('severity').className='severity sev-'+severity;
+ $('severity').textContent=severity==='none'?'No failure detected':severity+' severity';
+ $('resultTitle').textContent='Test result · '+safeText(r.workflow);
+ $('resultSub').textContent='Scenario: '+(categoryText[r.category]||r.category)+' · Risk: '+r.risk+' · Reference: '+r.result_id;
+ const checks=r.checks||[];
+ let html='';
+ if(checks.length===0){html='<div class="finding"><span class="finding-mark">i</span><div><strong>No deterministic check was configured.</strong><br><span style="color:#718498">This is not evidence that the response is safe; it means this run had no applicable deterministic check.</span></div></div>'}
+ checks.forEach(c=>{
+  const passed=!!c.passed;
+  html+='<div class="finding"><span class="finding-mark '+(passed?'':'bad')+'">'+(passed?'✓':'!')+'</span><div><strong>'+safeText(c.rule.replaceAll('_',' '))+' · '+(passed?'PASS':'FLAG')+'</strong><br><span style="color:#718498">'+safeText(c.detail|| (passed?'Configured check passed.':'Configured check did not pass.'))+'</span></div></div>';
+ });
+ $('findings').innerHTML=html;
+ $('limits').textContent='Limitations: this test evaluates one supplied response using the current reference engine. It does not test the connected AI system, prove a real action occurred, detect all semantic or Arabic dialect risks, or issue a production release approval. A “No failure detected” result is not a safety certification.';
+ $('result').style.display='block';$('result').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+$('copyResult').addEventListener('click',async()=>{
+ if(!lastResult)return;
+ const summary=['Mubayyin public sandbox result','Workflow: '+lastResult.workflow,'Scenario: '+lastResult.category,'Risk: '+lastResult.risk,'Severity: '+lastResult.final_severity,'Trial ID: '+lastResult.result_id,'Checks: '+lastResult.checks.map(c=>c.rule+': '+(c.passed?'PASS':'FLAG')+(c.detail?' — '+c.detail:'')).join(' | '),'Limitations: single response, current reference engine; not a production certification.'].join('\n');
+ try{await navigator.clipboard.writeText(summary);toast('Result summary copied.')}catch{const t=document.createElement('textarea');t.value=summary;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();toast('Result summary copied.')}
+});
+</script>
+</body>
+</html>
