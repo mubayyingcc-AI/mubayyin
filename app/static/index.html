@@ -370,7 +370,8 @@ $('createRelease').addEventListener('click',async()=>{
    system_id:lastResult.systemId,
    result_ids:[lastResult.result_id],
    approver:null,
-   scenario_set_version:'public-test-v1'
+   scenario_set_version:'public-test-v1',
+   required_scenario_ids:[lastResult.scenarioId]
   })});
   const data=await response.json();
   if(!response.ok)throw new Error(data.detail||'Could not create release record ('+response.status+').');
