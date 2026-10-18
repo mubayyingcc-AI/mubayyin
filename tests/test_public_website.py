@@ -1,6 +1,7 @@
 import unittest
 from fastapi.testclient import TestClient
 from app.api import app
+import app.api as api_module
 
 class WebsiteAndApiTests(unittest.TestCase):
     def setUp(self):
@@ -47,6 +48,24 @@ class WebsiteAndApiTests(unittest.TestCase):
         response = self.client.post("/partnership/enquiries", json=payload)
         self.assertEqual(response.status_code, 422)
         self.assertIn("email", response.json()["detail"].lower())
+
+
+    def test_private_partner_inbox_page_is_noindex(self):
+        response = self.client.get("/partner-inbox")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("noindex,nofollow", response.text)
+        self.assertIn("PARTNER_ADMIN_TOKEN", response.text)
+
+    def test_partner_inbox_rejects_missing_or_wrong_token(self):
+        original = api_module.PARTNER_ADMIN_TOKEN
+        api_module.PARTNER_ADMIN_TOKEN = "unit-test-token"
+        try:
+            missing = self.client.get("/partnership/enquiries")
+            wrong = self.client.get("/partnership/enquiries", headers={"Authorization": "Bearer wrong-token"})
+            self.assertEqual(missing.status_code, 401)
+            self.assertEqual(wrong.status_code, 401)
+        finally:
+            api_module.PARTNER_ADMIN_TOKEN = original
 
     def test_trial_flow_flags_forbidden_phrase(self):
         system = self.client.post("/systems", json={
