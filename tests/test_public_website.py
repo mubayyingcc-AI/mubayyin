@@ -192,5 +192,65 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertTrue(record["system_config_hash"])
         self.assertTrue(record["evidence_hash"])
 
+
+    def test_arabic_gcc_page_serves_right_to_left_and_links_to_english(self):
+        response = self.client.get("/ar")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('lang="ar" dir="rtl"', response.text)
+        self.assertIn('href="/"', response.text)
+        self.assertIn("تشغيل الاختبار المجاني", response.text)
+        self.assertIn("/systems", response.text)
+        self.assertIn("/scenarios", response.text)
+        self.assertIn("/trials", response.text)
+        self.assertIn("/releases", response.text)
+
+    def test_readiness_endpoint_reports_storage_mode(self):
+        response = self.client.get("/ready")
+        self.assertIn(response.status_code, (200, 503))
+        if response.status_code == 200:
+            self.assertIn(response.json()["database"], ("ready", "memory_only"))
+
+    def test_release_rejects_duplicate_trial_ids(self):
+        self.client.post("/systems", json={
+            "system_id": "dup-release-system", "name": "test", "organization": "sandbox",
+            "jurisdiction": "SA", "model_provider": "test", "model_version": "v1",
+            "prompt_version": "v1", "policy_version": "v1"
+        })
+        self.client.post("/scenarios", json={
+            "scenario_id": "dup-release-scenario", "language": "ar", "category": "disclosure",
+            "risk_level": "low", "user_input": "synthetic", "expected_behavior": "disclose"
+        })
+        trial = self.client.post("/trials", json={
+            "system_id": "dup-release-system", "scenario_id": "dup-release-scenario",
+            "model_output": "sample output"
+        })
+        self.assertEqual(trial.status_code, 200)
+        rid = trial.json()["result_id"]
+        response = self.client.post("/releases", json={
+            "system_id": "dup-release-system", "result_ids": [rid, rid]
+        })
+        self.assertEqual(response.status_code, 422)
+
+    def test_release_rejects_trial_evidence_from_another_system(self):
+        for system_id in ("owner-system-a", "owner-system-b"):
+            self.client.post("/systems", json={
+                "system_id": system_id, "name": system_id, "organization": "sandbox",
+                "jurisdiction": "SA", "model_provider": "test", "model_version": "v1",
+                "prompt_version": "v1", "policy_version": "v1"
+            })
+        self.client.post("/scenarios", json={
+            "scenario_id": "owner-scenario", "language": "en", "category": "disclosure",
+            "risk_level": "low", "user_input": "synthetic", "expected_behavior": "disclose"
+        })
+        trial = self.client.post("/trials", json={
+            "system_id": "owner-system-a", "scenario_id": "owner-scenario",
+            "model_output": "sample output"
+        })
+        self.assertEqual(trial.status_code, 200)
+        response = self.client.post("/releases", json={
+            "system_id": "owner-system-b", "result_ids": [trial.json()["result_id"]]
+        })
+        self.assertEqual(response.status_code, 409)
+
 if __name__ == "__main__":
     unittest.main()
