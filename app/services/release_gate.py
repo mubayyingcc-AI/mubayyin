@@ -100,29 +100,34 @@ def decide_release(
     conditions: list[str] = []
     reason_codes: list[str] = []
 
+    status = ReleaseStatus.SAFE_TO_SERVE
     if missing_ids:
         status = ReleaseStatus.HOLD_FOR_REPAIR
         conditions.append("Required scenario coverage is incomplete; run the missing scenarios before release.")
         reason_codes.append("REQUIRED_SCENARIO_COVERAGE_INCOMPLETE")
-    elif critical > thresholds.max_critical_failures:
+
+    if critical > thresholds.max_critical_failures:
         status = ReleaseStatus.HOLD_FOR_REPAIR
         conditions.append(f"{critical} critical failure(s) must be remediated before release.")
         reason_codes.append(ReasonCode.CRITICAL_FAILURE_PRESENT.value)
-    elif major > thresholds.max_major_failures:
-        status = ReleaseStatus.CONDITIONAL_SERVE
+    else:
+        reason_codes.append(ReasonCode.CRITICAL_FAILURES_ZERO.value)
+
+    if major > thresholds.max_major_failures:
+        if status != ReleaseStatus.HOLD_FOR_REPAIR:
+            status = ReleaseStatus.CONDITIONAL_SERVE
         conditions.append(
             f"{major} major failure(s) exceed the accepted threshold "
             f"({thresholds.max_major_failures}); require human review queue and restricted rollout."
         )
         reason_codes.append(ReasonCode.MAJOR_FAILURES_EXCEED_THRESHOLD.value)
     elif major > 0 and thresholds.require_human_signoff_above_major:
-        status = ReleaseStatus.CONDITIONAL_SERVE
+        if status == ReleaseStatus.SAFE_TO_SERVE:
+            status = ReleaseStatus.CONDITIONAL_SERVE
         conditions.append("Release requires human sign-off due to unresolved major-severity findings.")
         reason_codes.append(ReasonCode.MAJOR_FAILURES_WITHIN_THRESHOLD.value)
         reason_codes.append(ReasonCode.HUMAN_SIGNOFF_REQUIRED.value)
     else:
-        status = ReleaseStatus.SAFE_TO_SERVE
-        reason_codes.append(ReasonCode.CRITICAL_FAILURES_ZERO.value)
         reason_codes.append(ReasonCode.POLICY_REQUIREMENTS_SATISFIED.value)
 
     if status != ReleaseStatus.SAFE_TO_SERVE and not approver:
