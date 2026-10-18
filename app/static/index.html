@@ -250,6 +250,26 @@ $('createRelease').addEventListener('click',async()=>{
   button.disabled=false;button.textContent='Retry release record';
  }
 });
+$('partnerForm').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const err=$('partnerError'),success=$('partnerSuccess'),button=$('partnerSubmit');
+ err.style.display='none';success.style.display='none';
+ if(!$('partnerConsent').checked){err.textContent='Please consent to being contacted about this enquiry.';err.style.display='block';return}
+ const payload={name:$('partnerName').value.trim(),email:$('partnerEmail').value.trim(),
+ organization:$('partnerOrg').value.trim(),role:$('partnerRole').value.trim(),
+ jurisdiction:$('partnerJurisdiction').value,workflow_type:$('partnerWorkflow').value,
+ preferred_involvement:$('partnerInvolvement').value,current_problem:$('partnerProblem').value.trim(),
+ consent_to_contact:$('partnerConsent').checked,website:$('partnerWebsite').value};
+ button.disabled=true;button.textContent='Submitting…';
+ try{
+  const response=await fetch('/partnership/enquiries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'The enquiry could not be saved. Please try again later.');
+  success.textContent='Thank you. Your enquiry has been received'+(data.enquiry_id&&data.enquiry_id!=='received'?' (reference: '+data.enquiry_id+')':'')+'. We will review it for early-access collaboration.';
+  success.style.display='block';$('partnerForm').reset();
+ }catch(error){err.textContent=error.message||'The enquiry could not be submitted. Please retry.';err.style.display='block'}
+ finally{button.disabled=false;button.textContent='Request free early access ↗'}
+});
 $('copyResult').addEventListener('click',async()=>{
  if(!lastResult)return;
  const summary=['Mubayyin public sandbox result','Workflow: '+lastResult.workflow,'Scenario: '+lastResult.category,'Risk: '+lastResult.risk,'Severity: '+lastResult.final_severity,'Trial ID: '+lastResult.result_id,'Checks: '+lastResult.checks.map(c=>c.rule+': '+(c.passed?'PASS':'FLAG')+(c.detail?' — '+c.detail:'')).join(' | '),'Release record: '+(lastResult.releaseRecord?JSON.stringify(lastResult.releaseRecord):'not created'),'Limitations: single response, current reference engine; not a production certification.'].join('\n');
