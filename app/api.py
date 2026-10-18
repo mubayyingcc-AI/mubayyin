@@ -11,7 +11,12 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
+import os
+import re
+from datetime import datetime, timezone
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.core import AISystem, ScenarioCase, HumanReview, Severity
 from app.services.evaluator import run_trial
@@ -23,7 +28,7 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# --- in-memory storage (replace with persistent, tenant-isolated storage) ---
+# --- in-memory trial storage (still sandbox-only; persistent trial storage is not implemented) ---
 _systems: dict[str, AISystem] = {}
 _scenarios: dict[str, ScenarioCase] = {}
 _release_records: dict[str, list] = {}
@@ -78,6 +83,115 @@ class DecideReleaseRequest(BaseModel):
     max_major_failures: int = 3
     scenario_set_version: str = "v1"
 
+
+
+# --- persistent design-partner intake ----------------------------------------
+# This table stores only voluntary partnership enquiries, not test payloads.
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+_db_engine = None
+_database_ready = False
+_database_error = None
+
+
+def _database_url() -> str:
+    url = DATABASE_URL.strip()
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    if url.startswith("postgresql://") and "+" not in url.split(":", 1)[0]:
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
+def _initialize_partner_storage() -> None:
+    global _db_engine, _database_ready, _database_error
+    if not DATABASE_URL:
+        _database_error = "DATABASE_URL is not configured"
+        return
+    try:
+        _db_engine = create_engine(_database_url(), pool_pre_ping=True, pool_recycle=300)
+        with _db_engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS mubayyin_partner_enquiries (
+                    id BIGSERIAL PRIMARY KEY,
+                    enquiry_id VARCHAR(40) NOT NULL UNIQUE,
+                    name VARCHAR(120) NOT NULL,
+                    email VARCHAR(254) NOT NULL,
+                    organization VARCHAR(160) NOT NULL,
+                    role VARCHAR(120) NOT NULL,
+                    jurisdiction VARCHAR(80) NOT NULL,
+                    workflow_type VARCHAR(120) NOT NULL,
+                    current_problem TEXT NOT NULL,
+                    preferred_involvement VARCHAR(80) NOT NULL,
+                    consent_to_contact BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_mubayyin_partner_enquiries_created_at ON mubayyin_partner_enquiries (created_at DESC)"))
+        _database_ready = True
+        _database_error = None
+    except Exception as exc:
+        _database_ready = False
+        # Keep secrets and connection strings out of logs and responses.
+        _database_error = type(exc).__name__
+
+
+class PartnerEnquiryRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: str = Field(min_length=5, max_length=254)
+    organization: str = Field(min_length=2, max_length=160)
+    role: str = Field(min_length=2, max_length=120)
+    jurisdiction: str = Field(min_length=2, max_length=80)
+    workflow_type: str = Field(min_length=2, max_length=120)
+    current_problem: str = Field(min_length=20, max_length=3000)
+    preferred_involvement: str = Field(min_length=2, max_length=80)
+    consent_to_contact: bool
+    website: str = ""  # honeypot: must remain empty
+
+
+@app.on_event("startup")
+def initialize_storage():
+    _initialize_partner_storage()
+
+
+@app.post("/partnership/enquiries", status_code=201)
+def create_partner_enquiry(req: PartnerEnquiryRequest):
+    if req.website.strip():
+        # Do not reveal the honeypot to bots; return a generic accepted response.
+        return {"accepted": True, "enquiry_id": "received"}
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", req.email.strip()):
+        raise HTTPException(status_code=422, detail="Enter a valid email address.")
+    if not req.consent_to_contact:
+        raise HTTPException(status_code=422, detail="Please consent to being contacted about this enquiry.")
+    allowed_involvement = {"design_partner", "technical_evaluator", "research_collaborator", "other"}
+    if req.preferred_involvement not in allowed_involvement:
+        raise HTTPException(status_code=422, detail="Select a listed partnership type.")
+    if not _database_ready or _db_engine is None:
+        raise HTTPException(status_code=503, detail="Partnership enquiries are temporarily unavailable because persistent storage is not ready. Please try again later.")
+    enquiry_id = "partner_" + __import__("uuid").uuid4().hex[:12]
+    try:
+        with _db_engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO mubayyin_partner_enquiries
+                (enquiry_id, name, email, organization, role, jurisdiction, workflow_type,
+                 current_problem, preferred_involvement, consent_to_contact)
+                VALUES
+                (:enquiry_id, :name, :email, :organization, :role, :jurisdiction, :workflow_type,
+                 :current_problem, :preferred_involvement, :consent_to_contact)
+            """), {
+                "enquiry_id": enquiry_id,
+                "name": req.name.strip(),
+                "email": req.email.strip().lower(),
+                "organization": req.organization.strip(),
+                "role": req.role.strip(),
+                "jurisdiction": req.jurisdiction.strip(),
+                "workflow_type": req.workflow_type.strip(),
+                "current_problem": req.current_problem.strip(),
+                "preferred_involvement": req.preferred_involvement,
+                "consent_to_contact": req.consent_to_contact,
+            })
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="We could not safely save this enquiry. No enquiry was confirmed; please retry later.")
+    return {"accepted": True, "enquiry_id": enquiry_id, "message": "Your partnership enquiry was saved. Mubayyin is an early-access test lab; this is not a commercial commitment."}
 
 @app.get("/", include_in_schema=False)
 def website():
@@ -181,4 +295,4 @@ def get_release_history(system_id: str):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": app.version}
+    return {"status": "ok" if _database_ready else "degraded", "version": app.version, "partner_storage": "ready" if _database_ready else "unavailable"}
