@@ -21,7 +21,7 @@ class CreateScenarioRequest(BaseModel):
  scenario_id:str=Field(min_length=1,max_length=80);language:str=Field(min_length=2,max_length=8);dialect:Optional[str]=Field(default=None,max_length=40);category:str=Field(min_length=1,max_length=80);risk_level:str=Field(min_length=1,max_length=20);user_input:str=Field(min_length=1,max_length=4000);expected_behavior:str=Field(min_length=1,max_length=4000);forbidden_behavior:Optional[str]=Field(default=None,max_length=1000);requires_escalation:bool=False;required_disclosure:Optional[str]=Field(default=None,max_length=1000);source:str=Field(default="synthetic",max_length=40)
 class RunTrialRequest(BaseModel): system_id:str=Field(min_length=1,max_length=80);scenario_id:str=Field(min_length=1,max_length=80);model_output:str=Field(min_length=1,max_length=20000)
 class HumanReviewRequest(BaseModel): reviewer:str;agrees_with_automation:bool;override_severity:Optional[str]=None;comment:str=""
-class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1"
+class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1";required_scenario_ids:list[str]=Field(default_factory=list)
 DATABASE_URL=os.getenv("DATABASE_URL","");PARTNER_ADMIN_TOKEN=os.getenv("PARTNER_ADMIN_TOKEN","");_db_engine=None;_database_ready=False;_database_error=None
 def _database_url():
  u=DATABASE_URL.strip()
@@ -194,6 +194,9 @@ def release(req:DecideReleaseRequest):
  s=_systems.get(req.system_id)
  if not s:raise HTTPException(404,"system not found")
  if len(req.result_ids)!=len(set(req.result_ids)):raise HTTPException(422,"Duplicate trial result IDs are not allowed.")
+ if len(req.required_scenario_ids)!=len(set(req.required_scenario_ids)):raise HTTPException(422,"Duplicate required scenario IDs are not allowed.")
+ unknown_scenarios=[x for x in req.required_scenario_ids if x not in _scenarios]
+ if unknown_scenarios:raise HTTPException(404,"One or more required scenario IDs were not found.")
  unknown=[x for x in req.result_ids if x not in _trial_results]
  if unknown:raise HTTPException(404,"One or more trial result IDs were not found.")
  rs=[_trial_results[x] for x in req.result_ids]
@@ -205,5 +208,5 @@ def release(req:DecideReleaseRequest):
   if r.system_config_hash!=s.config_hash():raise HTTPException(409,"Trial evidence is stale for the current system configuration; rerun the scenario.")
   if not r.scenario_config_hash or r.scenario_config_hash!=sc.config_hash():raise HTTPException(409,"Trial evidence is stale for the current scenario configuration; rerun the scenario.")
  h=_release_records.setdefault(req.system_id,[]);prev=h[-1].evidence_hash if h else None
- rec=decide_release(s,rs,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,prev,req.scenario_set_version)
+ rec=decide_release(s,rs,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,prev,req.scenario_set_version,req.required_scenario_ids)
  d=_persist("release",rec.record_id,s.system_id,rec,immutable=True);h.append(rec);p=rec.to_dict();p["persistence"]="durable" if d else "memory_only";return p
