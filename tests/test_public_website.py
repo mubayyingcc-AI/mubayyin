@@ -385,5 +385,64 @@ class WebsiteAndApiTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 401)
 
+
+    def test_release_record_export_can_be_verified_and_is_downloadable(self):
+        self.client.post("/systems", json={
+            "system_id": "export-system", "name": "test", "organization": "sandbox",
+            "jurisdiction": "SA", "model_provider": "test", "model_version": "v1",
+            "prompt_version": "v1", "policy_version": "v1"
+        })
+        self.client.post("/scenarios", json={
+            "scenario_id": "export-scenario", "language": "en", "category": "disclosure",
+            "risk_level": "low", "user_input": "synthetic", "expected_behavior": "disclose"
+        })
+        trial = self.client.post("/trials", json={
+            "system_id": "export-system", "scenario_id": "export-scenario",
+            "model_output": "Synthetic response with a clear disclosure."
+        })
+        self.assertEqual(trial.status_code, 200)
+        release = self.client.post("/releases", json={
+            "system_id": "export-system", "result_ids": [trial.json()["result_id"]],
+            "required_scenario_ids": ["export-scenario"], "scenario_set_version": "export-v1"
+        })
+        self.assertEqual(release.status_code, 200)
+        record_id = release.json()["record_id"]
+        exported = self.client.get(f"/releases/{record_id}/export")
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("attachment;", exported.headers.get("content-disposition", ""))
+        bundle = exported.json()
+        self.assertEqual(bundle["schema_version"], "mubayyin.release-bundle.v1")
+        self.assertEqual(bundle["record"]["record_id"], record_id)
+        verification = self.client.post("/releases/verify", json=bundle)
+        self.assertEqual(verification.status_code, 200)
+        self.assertTrue(verification.json()["integrity_valid"])
+        self.assertFalse(verification.json()["authenticity_verified"])
+        self.assertEqual(verification.json()["status"], "integrity_valid_unsigned")
+
+    def test_release_record_export_is_not_available_to_another_session(self):
+        first = TestClient(app, base_url="https://testserver")
+        second = TestClient(app, base_url="https://testserver")
+        first.get("/")
+        second.get("/")
+        first.post("/systems", json={
+            "system_id": "export-private-system", "name": "test", "organization": "sandbox",
+            "jurisdiction": "SA", "model_provider": "test", "model_version": "v1",
+            "prompt_version": "v1", "policy_version": "v1"
+        })
+        first.post("/scenarios", json={
+            "scenario_id": "export-private-scenario", "language": "en", "category": "disclosure",
+            "risk_level": "low", "user_input": "synthetic", "expected_behavior": "disclose"
+        })
+        trial = first.post("/trials", json={
+            "system_id": "export-private-system", "scenario_id": "export-private-scenario",
+            "model_output": "Synthetic response."
+        })
+        release = first.post("/releases", json={
+            "system_id": "export-private-system", "result_ids": [trial.json()["result_id"]]
+        })
+        self.assertEqual(release.status_code, 200)
+        response = second.get(f'/releases/{release.json()["record_id"]}/export')
+        self.assertEqual(response.status_code, 404)
+
 if __name__ == "__main__":
     unittest.main()
