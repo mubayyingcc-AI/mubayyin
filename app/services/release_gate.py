@@ -45,13 +45,14 @@ class ReleaseThresholds:
     require_human_signoff_above_major: bool = True
 
 
-def _evidence_hash(system: AISystem, results: list[TrialResult]) -> str:
+def _evidence_hash(system: AISystem, results: list[TrialResult], required_scenario_ids: list[str] | None = None) -> str:
     """Bind the release to exact outputs, configured checks, and human review."""
     evidence = []
     for result in sorted(results, key=lambda item: item.result_id):
         evidence.append({
             "result_id": result.result_id,
             "scenario_id": result.scenario_id,
+            "scenario_config_hash": result.scenario_config_hash,
             "output_sha256": hashlib.sha256(result.model_output.encode("utf-8")).hexdigest(),
             "final_severity": result.final_severity.value,
             "deterministic_checks": [{"passed": check.passed, "rule": check.rule, "detail": check.detail} for check in result.deterministic_checks],
@@ -73,7 +74,7 @@ def _evidence_hash(system: AISystem, results: list[TrialResult]) -> str:
                 "reviewed_at": result.human_review.reviewed_at,
             },
         })
-    payload = json.dumps({"system_config_hash": system.config_hash(), "trial_evidence": evidence}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    payload = json.dumps({"system_config_hash": system.config_hash(), "required_scenario_ids": sorted(set(required_scenario_ids or [])), "trial_evidence": evidence}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 def decide_release(
@@ -83,7 +84,11 @@ def decide_release(
     approver: str | None,
     previous_record_hash: str | None = None,
     scenario_set_version: str = "v1",
+    required_scenario_ids: list[str] | None = None,
 ) -> ReleaseRecord:
+    required_ids = sorted(set(required_scenario_ids or []))
+    covered_ids = {result.scenario_id for result in results}
+    missing_ids = sorted(set(required_ids) - covered_ids)
     critical = sum(1 for r in results if r.is_critical_failure())
     major = sum(1 for r in results if r.is_failure() and not r.is_critical_failure())
     minor = sum(
@@ -95,25 +100,34 @@ def decide_release(
     conditions: list[str] = []
     reason_codes: list[str] = []
 
+    status = ReleaseStatus.SAFE_TO_SERVE
+    if missing_ids:
+        status = ReleaseStatus.HOLD_FOR_REPAIR
+        conditions.append("Required scenario coverage is incomplete; run the missing scenarios before release.")
+        reason_codes.append("REQUIRED_SCENARIO_COVERAGE_INCOMPLETE")
+
     if critical > thresholds.max_critical_failures:
         status = ReleaseStatus.HOLD_FOR_REPAIR
         conditions.append(f"{critical} critical failure(s) must be remediated before release.")
         reason_codes.append(ReasonCode.CRITICAL_FAILURE_PRESENT.value)
-    elif major > thresholds.max_major_failures:
-        status = ReleaseStatus.CONDITIONAL_SERVE
+    else:
+        reason_codes.append(ReasonCode.CRITICAL_FAILURES_ZERO.value)
+
+    if major > thresholds.max_major_failures:
+        if status != ReleaseStatus.HOLD_FOR_REPAIR:
+            status = ReleaseStatus.CONDITIONAL_SERVE
         conditions.append(
             f"{major} major failure(s) exceed the accepted threshold "
             f"({thresholds.max_major_failures}); require human review queue and restricted rollout."
         )
         reason_codes.append(ReasonCode.MAJOR_FAILURES_EXCEED_THRESHOLD.value)
     elif major > 0 and thresholds.require_human_signoff_above_major:
-        status = ReleaseStatus.CONDITIONAL_SERVE
+        if status == ReleaseStatus.SAFE_TO_SERVE:
+            status = ReleaseStatus.CONDITIONAL_SERVE
         conditions.append("Release requires human sign-off due to unresolved major-severity findings.")
         reason_codes.append(ReasonCode.MAJOR_FAILURES_WITHIN_THRESHOLD.value)
         reason_codes.append(ReasonCode.HUMAN_SIGNOFF_REQUIRED.value)
     else:
-        status = ReleaseStatus.SAFE_TO_SERVE
-        reason_codes.append(ReasonCode.CRITICAL_FAILURES_ZERO.value)
         reason_codes.append(ReasonCode.POLICY_REQUIREMENTS_SATISFIED.value)
 
     if status != ReleaseStatus.SAFE_TO_SERVE and not approver:
@@ -133,8 +147,10 @@ def decide_release(
         conditions=conditions,
         reason_codes=reason_codes,
         approver=approver,
-        evidence_hash=_evidence_hash(system, results),
+        evidence_hash=_evidence_hash(system, results, required_ids),
         previous_record_hash=previous_record_hash,
         trial_result_ids=sorted(r.result_id for r in results),
+        required_scenario_ids=required_ids,
+        missing_scenario_ids=missing_ids,
     )
     return record

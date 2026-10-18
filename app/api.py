@@ -1,8 +1,8 @@
 """
-Mubayyin HTTP API — verified core engine plus the public test-lab website.
-The current API stores records in memory; do not submit confidential or
-production customer data until persistence, access controls, and tenant
-isolation have been implemented and reviewed.
+Mubayyin HTTP API — sandbox release-assurance engine and public test lab.
+Durable evidence storage is enabled when DATABASE_URL is configured, but
+authentication and tenant isolation are not yet implemented. Do not submit
+confidential or production customer data.
 """
 from __future__ import annotations
 
@@ -36,6 +36,8 @@ _systems: dict[str, AISystem] = {}
 _scenarios: dict[str, ScenarioCase] = {}
 _release_records: dict[str, list] = {}
 _trial_results: dict[str, object] = {}
+# Explicit provenance prevents results from one system being reused for another.
+_trial_system_ids: dict[str, str] = {}
 
 # --- request/response schemas -------------------------------------------------
 class CreateSystemRequest(BaseModel):
@@ -85,7 +87,7 @@ class DecideReleaseRequest(BaseModel):
     max_critical_failures: int = 0
     max_major_failures: int = 3
     scenario_set_version: str = "v1"
-
+    required_scenario_ids: list[str] = Field(default_factory=list)
 
 
 # --- persistent design-partner intake ----------------------------------------
@@ -236,6 +238,7 @@ def _restore_evidence_records() -> None:
                 payload["judge_scores"] = [JudgeScore(**{**x, "severity": Severity(x["severity"])}) for x in payload.get("judge_scores", [])]
                 payload["final_severity"] = Severity(payload["final_severity"])
                 _trial_results[row["record_id"]] = TrialResult(**payload)
+                _trial_system_ids[row["record_id"]] = row["system_id"]
             elif kind == "release":
                 payload["status"] = ReleaseStatus(payload["status"])
                 record = ReleaseRecord(**payload)
@@ -414,6 +417,17 @@ def create_system(req: CreateSystemRequest):
 @app.post("/scenarios")
 def create_scenario(req: CreateScenarioRequest):
     scenario = ScenarioCase(**req.dict())
+    existing = _scenarios.get(scenario.scenario_id)
+    if existing and existing.config_hash() != scenario.config_hash():
+        affected_results = [
+            result_id for result_id, result in _trial_results.items()
+            if result.scenario_id == scenario.scenario_id
+        ]
+        if affected_results:
+            raise HTTPException(
+                status_code=409,
+                detail="scenario is referenced by existing trial evidence; create a new scenario_id for the revised policy or expected behavior so previous evidence remains interpretable",
+            )
     durable = _persist_evidence("scenario", scenario.scenario_id, "scenario:" + scenario.scenario_id, scenario)
     _scenarios[scenario.scenario_id] = scenario
     return {"scenario_id": scenario.scenario_id, "persistence": "durable" if durable else "memory_only"}
@@ -430,6 +444,7 @@ def run_trial_endpoint(req: RunTrialRequest):
     result.system_config_hash = system.config_hash()
     durable = _persist_evidence("trial", result.result_id, system.system_id, result)
     _trial_results[result.result_id] = result
+    _trial_system_ids[result.result_id] = system.system_id
     return {
         "result_id": result.result_id,
         "final_severity": result.final_severity.value,
@@ -464,7 +479,9 @@ def add_human_review(result_id: str, req: HumanReviewRequest):
         override_severity=Severity(req.override_severity) if req.override_severity else None,
         comment=req.comment,
     )
-    system_id = next((sid for sid, system in _systems.items() if system.config_hash() == result.system_config_hash), "unknown-system")
+    system_id = _trial_system_ids.get(result_id)
+    if not system_id:
+        raise HTTPException(status_code=409, detail="Trial provenance is missing; this result cannot be safely updated.")
     durable = _persist_evidence("trial", result.result_id, system_id, result)
     return {"result_id": result_id, "reviewed": True, "persistence": "durable" if durable else "memory_only"}
 
@@ -475,9 +492,30 @@ def create_release(req: DecideReleaseRequest):
     if not system:
         raise HTTPException(status_code=404, detail="system not found")
 
-    results = [_trial_results[rid] for rid in req.result_ids if rid in _trial_results]
-    if not results:
-        raise HTTPException(status_code=400, detail="no valid trial results provided")
+    if not req.result_ids:
+        raise HTTPException(status_code=400, detail="at least one trial result is required")
+    if len(req.required_scenario_ids) != len(set(req.required_scenario_ids)):
+        raise HTTPException(status_code=422, detail="duplicate required scenario IDs are not allowed")
+    unknown_required = [sid for sid in req.required_scenario_ids if sid not in _scenarios]
+    if unknown_required:
+        raise HTTPException(status_code=404, detail="one or more required scenario IDs were not found")
+    if len(req.result_ids) != len(set(req.result_ids)):
+        raise HTTPException(status_code=422, detail="duplicate trial result IDs are not allowed")
+    missing_ids = [rid for rid in req.result_ids if rid not in _trial_results]
+    if missing_ids:
+        raise HTTPException(status_code=404, detail="one or more trial results were not found; no release record was created")
+
+    results = [_trial_results[rid] for rid in req.result_ids]
+    for result in results:
+        if _trial_system_ids.get(result.result_id) != req.system_id:
+            raise HTTPException(status_code=409, detail="trial provenance mismatch: every result must belong to the requested AI system")
+        if result.system_config_hash != system.config_hash():
+            raise HTTPException(status_code=409, detail="stale evidence: the AI system configuration changed after this trial. Rerun affected scenarios before creating a release record.")
+        scenario = _scenarios.get(result.scenario_id)
+        if not scenario:
+            raise HTTPException(status_code=409, detail="scenario provenance is missing; rerun this scenario before creating a release record")
+        if not result.scenario_config_hash or result.scenario_config_hash != scenario.config_hash():
+            raise HTTPException(status_code=409, detail="stale scenario evidence: the scenario, policy, or expected behavior changed after this trial. Rerun the scenario before creating a release record.")
 
     history = _release_records.setdefault(req.system_id, [])
     previous_hash = history[-1].evidence_hash if history else None
@@ -491,6 +529,7 @@ def create_release(req: DecideReleaseRequest):
         approver=req.approver,
         previous_record_hash=previous_hash,
         scenario_set_version=req.scenario_set_version,
+        required_scenario_ids=req.required_scenario_ids,
     )
     durable = _persist_evidence("release", record.record_id, system.system_id, record, immutable=True)
     history.append(record)

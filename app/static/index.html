@@ -164,8 +164,8 @@
   <div class="section-head"><div class="kicker">Designed for inspectability</div><h2>What the current engine can—and cannot—prove.</h2><p class="lead">Trust begins with clear boundaries. The public test lab uses the current deterministic checks and a simple reference evaluator; it is not a production certification or a substitute for expert review.</p></div>
   <div class="three">
    <article class="feature"><div class="feature-icon">✓</div><h3>Implemented in the current engine</h3><p>Explicit forbidden-phrase checks, required-disclosure checks, escalation phrase checks, scenario configuration, configuration hashes, evidence hashes, and release-gate logic.</p></article>
-   <article class="feature"><div class="feature-icon">△</div><h3>Known limitations</h3><p>The reference judge uses lexical overlap, not an independent language model. Phrase matching does not understand semantic paraphrases. The API uses in-memory storage.</p></article>
-   <article class="feature"><div class="feature-icon">→</div><h3>Next engineering gates</h3><p>Persistent storage, authentication and tenant isolation, robust privacy detection, customer-defined scenario packs, complete report export, and payment integration.</p></article>
+   <article class="feature"><div class="feature-icon">△</div><h3>Known limitations</h3><p>The reference judge uses lexical overlap, not an independent language model. Phrase matching does not understand semantic paraphrases. PostgreSQL evidence persistence is implemented when configured, but restart/restore durability has not yet been independently verified. Authentication and tenant isolation are not implemented.</p></article>
+   <article class="feature"><div class="feature-icon">→</div><h3>Next engineering gates</h3><p>Database-backed restart/restore verification, authentication and tenant isolation, robust privacy detection, customer-defined scenario packs, complete report export, and payment integration.</p></article>
   </div>
  </div>
 </section>
