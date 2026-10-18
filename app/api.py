@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import secrets
+import json
+from dataclasses import asdict
+from enum import Enum
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Header, Query
@@ -18,7 +21,7 @@ import re
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.models.core import AISystem, ScenarioCase, HumanReview, Severity
+from app.models.core import AISystem, ScenarioCase, HumanReview, Severity, DeterministicCheckResult, JudgeScore, TrialResult, ReleaseRecord, ReleaseStatus
 from app.services.evaluator import run_trial
 from app.services.release_gate import decide_release, ReleaseThresholds
 
@@ -129,6 +132,17 @@ def _initialize_partner_storage() -> None:
             """))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_mubayyin_partner_enquiries_created_at ON mubayyin_partner_enquiries (created_at DESC)"))
             conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS mubayyin_evidence_records (
+                    record_type VARCHAR(24) NOT NULL,
+                    record_id VARCHAR(80) NOT NULL,
+                    system_id VARCHAR(80) NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (record_type, record_id)
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_mubayyin_evidence_system_created ON mubayyin_evidence_records (system_id, created_at)"))
+            conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS mubayyin_usage_events (
                     id BIGSERIAL PRIMARY KEY,
                     visitor_id VARCHAR(36) NOT NULL,
@@ -159,9 +173,82 @@ class PartnerEnquiryRequest(BaseModel):
     website: str = ""  # honeypot: must remain empty
 
 
+def _json_default(value):
+    if isinstance(value, Enum):
+        return value.value
+    if hasattr(value, "__dict__"):
+        return value.__dict__
+    raise TypeError(f"Unsupported evidence value: {type(value).__name__}")
+
+
+def _persist_evidence(record_type: str, record_id: str, system_id: str, record, immutable: bool = False) -> bool:
+    """Persist evidence when the configured database is available.
+    Returns False only in explicit local/test memory-only mode.
+    """
+    if not _database_ready or _db_engine is None:
+        if DATABASE_URL:
+            raise HTTPException(status_code=503, detail="Evidence storage is unavailable; no durable record was confirmed.")
+        return False
+    payload = json.dumps(asdict(record), sort_keys=True, separators=(",", ":"), default=_json_default)
+    try:
+        with _db_engine.begin() as conn:
+            if immutable:
+                conn.execute(text("""
+                    INSERT INTO mubayyin_evidence_records (record_type, record_id, system_id, payload)
+                    VALUES (:record_type, :record_id, :system_id, :payload)
+                    ON CONFLICT (record_type, record_id) DO NOTHING
+                """), {"record_type": record_type, "record_id": record_id, "system_id": system_id, "payload": payload})
+            else:
+                conn.execute(text("""
+                    INSERT INTO mubayyin_evidence_records (record_type, record_id, system_id, payload)
+                    VALUES (:record_type, :record_id, :system_id, :payload)
+                    ON CONFLICT (record_type, record_id) DO UPDATE
+                    SET payload = EXCLUDED.payload, system_id = EXCLUDED.system_id
+                """), {"record_type": record_type, "record_id": record_id, "system_id": system_id, "payload": payload})
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="Evidence storage failed; no durable record was confirmed.")
+    return True
+
+
+def _restore_evidence_records() -> None:
+    if not _database_ready or _db_engine is None:
+        return
+    try:
+        with _db_engine.begin() as conn:
+            rows = conn.execute(text("""
+                SELECT record_type, record_id, system_id, payload
+                FROM mubayyin_evidence_records ORDER BY created_at ASC
+            """)).mappings().all()
+        for row in rows:
+            payload = json.loads(row["payload"])
+            kind = row["record_type"]
+            if kind == "system":
+                _systems[row["record_id"]] = AISystem(**payload)
+            elif kind == "scenario":
+                _scenarios[row["record_id"]] = ScenarioCase(**payload)
+            elif kind == "trial":
+                review = payload.get("human_review")
+                if review:
+                    review["override_severity"] = Severity(review["override_severity"]) if review.get("override_severity") else None
+                    payload["human_review"] = HumanReview(**review)
+                payload["deterministic_checks"] = [DeterministicCheckResult(**x) for x in payload.get("deterministic_checks", [])]
+                payload["judge_scores"] = [JudgeScore(**{**x, "severity": Severity(x["severity"])}) for x in payload.get("judge_scores", [])]
+                payload["final_severity"] = Severity(payload["final_severity"])
+                _trial_results[row["record_id"]] = TrialResult(**payload)
+            elif kind == "release":
+                payload["status"] = ReleaseStatus(payload["status"])
+                record = ReleaseRecord(**payload)
+                _release_records.setdefault(row["system_id"], []).append(record)
+    except Exception as exc:
+        global _database_ready, _database_error
+        _database_ready = False
+        _database_error = type(exc).__name__
+
+
 @app.on_event("startup")
 def initialize_storage():
     _initialize_partner_storage()
+    _restore_evidence_records()
 
 
 @app.post("/partnership/enquiries", status_code=201)
@@ -319,15 +406,17 @@ def website():
 @app.post("/systems")
 def create_system(req: CreateSystemRequest):
     system = AISystem(**req.dict())
+    durable = _persist_evidence("system", system.system_id, system.system_id, system)
     _systems[system.system_id] = system
-    return {"system_id": system.system_id, "config_hash": system.config_hash()}
+    return {"system_id": system.system_id, "config_hash": system.config_hash(), "persistence": "durable" if durable else "memory_only"}
 
 
 @app.post("/scenarios")
 def create_scenario(req: CreateScenarioRequest):
     scenario = ScenarioCase(**req.dict())
+    durable = _persist_evidence("scenario", scenario.scenario_id, "scenario:" + scenario.scenario_id, scenario)
     _scenarios[scenario.scenario_id] = scenario
-    return {"scenario_id": scenario.scenario_id}
+    return {"scenario_id": scenario.scenario_id, "persistence": "durable" if durable else "memory_only"}
 
 
 @app.post("/trials")
@@ -339,6 +428,7 @@ def run_trial_endpoint(req: RunTrialRequest):
 
     result = run_trial(scenario, req.model_output)
     result.system_config_hash = system.config_hash()
+    durable = _persist_evidence("trial", result.result_id, system.system_id, result)
     _trial_results[result.result_id] = result
     return {
         "result_id": result.result_id,
@@ -359,6 +449,7 @@ def run_trial_endpoint(req: RunTrialRequest):
             for score in result.judge_scores
         ],
         "system_config_hash": result.system_config_hash,
+        "persistence": "durable" if durable else "memory_only",
     }
 
 
@@ -373,7 +464,9 @@ def add_human_review(result_id: str, req: HumanReviewRequest):
         override_severity=Severity(req.override_severity) if req.override_severity else None,
         comment=req.comment,
     )
-    return {"result_id": result_id, "reviewed": True}
+    system_id = next((sid for sid, system in _systems.items() if system.config_hash() == result.system_config_hash), "unknown-system")
+    durable = _persist_evidence("trial", result.result_id, system_id, result)
+    return {"result_id": result_id, "reviewed": True, "persistence": "durable" if durable else "memory_only"}
 
 
 @app.post("/releases")
@@ -399,8 +492,11 @@ def create_release(req: DecideReleaseRequest):
         previous_record_hash=previous_hash,
         scenario_set_version=req.scenario_set_version,
     )
+    durable = _persist_evidence("release", record.record_id, system.system_id, record, immutable=True)
     history.append(record)
-    return record.to_dict()
+    payload = record.to_dict()
+    payload["persistence"] = "durable" if durable else "memory_only"
+    return payload
 
 
 @app.get("/releases/{system_id}")
