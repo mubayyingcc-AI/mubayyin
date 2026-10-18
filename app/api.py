@@ -14,7 +14,7 @@ from app.models.core import AISystem, ScenarioCase, HumanReview, Severity, Deter
 from app.services.evaluator import run_trial
 from app.services.release_gate import decide_release, ReleaseThresholds
 app=FastAPI(title="Mubayyin Release Assurance API",description="Vendor-neutral AI release-assurance engine — GCC beachhead.",version="0.2.0")
-_systems={};_scenarios={};_release_records={};_trial_results={}
+_systems={};_scenarios={};_release_records={};_trial_results={};_trial_system_ids={}
 class CreateSystemRequest(BaseModel):
  system_id:str;name:str;organization:str;jurisdiction:str;model_provider:str;model_version:str;prompt_version:str;retrieval_version:Optional[str]=None;policy_version:str="v1";tool_version:Optional[str]=None
 class CreateScenarioRequest(BaseModel):
@@ -66,6 +66,7 @@ def _restore_evidence_records():
      p["human_review"]=HumanReview(**{**hr,"override_severity":Severity(hr["override_severity"]) if hr.get("override_severity") else None})
     p["final_severity"]=Severity(p["final_severity"])
     _trial_results[row["record_id"]]=TrialResult(**p)
+    _trial_system_ids[row["record_id"]]=row["system_id"]
    elif kind=="release":
     p["status"]=ReleaseStatus(p["status"])
     rec=ReleaseRecord(**p)
@@ -145,7 +146,7 @@ def scenario(req:CreateScenarioRequest):
 def trial(req:RunTrialRequest):
  s=_systems.get(req.system_id);sc=_scenarios.get(req.scenario_id)
  if not s or not sc:raise HTTPException(404,"system or scenario not found")
- r=run_trial(sc,req.model_output);r.system_config_hash=s.config_hash();r.scenario_config_hash=sc.config_hash();d=_persist("trial",r.result_id,s.system_id,r);_trial_results[r.result_id]=r
+ r=run_trial(sc,req.model_output);r.system_config_hash=s.config_hash();r.scenario_config_hash=sc.config_hash();d=_persist("trial",r.result_id,s.system_id,r);_trial_results[r.result_id]=r;_trial_system_ids[r.result_id]=s.system_id
  return {"result_id":r.result_id,"final_severity":r.final_severity.value,"is_failure":r.is_failure(),"deterministic_checks":[c.__dict__ for c in r.deterministic_checks],"judge_scores":[{"judge_name":j.judge_name,"groundedness":j.groundedness,"policy_adherence":j.policy_adherence,"language_quality":j.language_quality,"escalation_quality":j.escalation_quality,"privacy_behavior":j.privacy_behavior,"severity":j.severity.value,"reason":j.reason} for j in r.judge_scores],"system_config_hash":r.system_config_hash,"scenario_config_hash":r.scenario_config_hash,"persistence":"durable" if d else "memory_only"}
 @app.post("/trials/{result_id}/review")
 def review(result_id:str,req:HumanReviewRequest):
@@ -157,7 +158,7 @@ def review(result_id:str,req:HumanReviewRequest):
   try:override=Severity(req.override_severity)
   except ValueError:raise HTTPException(422,"Invalid override severity.")
  r.human_review=HumanReview(reviewer=req.reviewer.strip(),agrees_with_automation=req.agrees_with_automation,override_severity=override,comment=req.comment.strip())
- d=_persist("trial",r.result_id,next((sid for sid,s in _systems.items() if s.config_hash()==r.system_config_hash),""),r)
+ d=_persist("trial",r.result_id,_trial_system_ids.get(r.result_id,""),r)
  return {"result_id":r.result_id,"review_saved":True,"persistence":"durable" if d else "memory_only"}
 
 class UsageEventRequest(BaseModel):
@@ -196,7 +197,8 @@ def release(req:DecideReleaseRequest):
  if unknown:raise HTTPException(404,"One or more trial result IDs were not found.")
  rs=[_trial_results[x] for x in req.result_ids]
  if not rs:raise HTTPException(400,"no valid trial results provided")
- for r in rs:
+ for rid,r in zip(req.result_ids,rs):
+  if _trial_system_ids.get(rid)!=req.system_id:raise HTTPException(409,"Trial evidence belongs to a different system.")
   sc=_scenarios.get(r.scenario_id)
   if not sc:raise HTTPException(409,"A referenced scenario is unavailable.")
   if r.system_config_hash!=s.config_hash():raise HTTPException(409,"Trial evidence is stale for the current system configuration; rerun the scenario.")
