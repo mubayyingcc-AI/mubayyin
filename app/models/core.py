@@ -87,6 +87,11 @@ class ScenarioCase:
     required_disclosure: Optional[str] = None
     source: str = "synthetic"     # "synthetic" | "customer_provided" | "production_failure"
 
+    def config_hash(self) -> str:
+        """Fingerprint the exact scenario policy and test input used."""
+        payload = json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 
 @dataclass
 class DeterministicCheckResult:
@@ -124,6 +129,8 @@ class TrialResult:
     scenario_id: str
     system_config_hash: str
     model_output: str
+    # Empty default keeps older stored records readable; empty hashes are rejected for new release decisions.
+    scenario_config_hash: str = ""
     deterministic_checks: list[DeterministicCheckResult] = field(default_factory=list)
     judge_scores: list[JudgeScore] = field(default_factory=list)
     human_review: Optional[HumanReview] = None
