@@ -21,7 +21,7 @@
  <div class="wrap">
   <nav class="nav">
    <a class="brand" href="#" aria-label="Mubayyin home"><span class="mark">م</span><span>Mubayyin</span></a>
-   <div class="navlinks"><a href="#approach">Approach</a><a href="#test-lab">Test lab</a><a href="#evidence">Evidence model</a><a class="btn btn-primary" href="#test-lab">Run a free test <span>↗</span></a></div>
+   <div class="navlinks"><a href="#approach">Approach</a><a href="#test-lab">Test lab</a><a href="#evidence">Evidence model</a><a class="btn btn-ghost" href="/workspace">Pilot workspace</a><a class="btn btn-ghost" href="/ar" lang="ar" hreflang="ar" aria-label="عرض الموقع باللغة العربية">العربية</a><a class="btn btn-primary" href="#test-lab">Run a free test <span>↗</span></a></div>
   </nav>
   <div class="hero">
    <div>
@@ -37,7 +37,7 @@
     <div class="trace"><div class="trace-head"><span>What this build actually does</span><span style="color:#8fa7b8;font-weight:500">CURRENT BUILD</span></div>
      <div class="trace-row"><span class="trace-icon">1</span><span>Configured phrase and disclosure checks</span><span style="color:#70e1b1">Implemented</span></div>
      <div class="trace-row"><span class="trace-icon">2</span><span>Lexical-overlap reference evaluation</span><span class="trace-status">Limited</span></div>
-     <div class="trace-row"><span class="trace-icon">3</span><span>Persistent, tenant-isolated records</span><span class="trace-status">Not built</span></div>
+     <div class="trace-row"><span class="trace-icon">3</span><span>Private tenant-scoped evidence API</span><span class="trace-status">Pilot API · verify</span></div>
     </div>
    </div>
   </div>
@@ -164,8 +164,8 @@
   <div class="section-head"><div class="kicker">Designed for inspectability</div><h2>What the current engine can—and cannot—prove.</h2><p class="lead">Trust begins with clear boundaries. The public test lab uses the current deterministic checks and a simple reference evaluator; it is not a production certification or a substitute for expert review.</p></div>
   <div class="three">
    <article class="feature"><div class="feature-icon">✓</div><h3>Implemented in the current engine</h3><p>Explicit forbidden-phrase checks, required-disclosure checks, escalation phrase checks, scenario configuration, configuration hashes, evidence hashes, and release-gate logic.</p></article>
-   <article class="feature"><div class="feature-icon">△</div><h3>Known limitations</h3><p>The reference judge uses lexical overlap, not an independent language model. Phrase matching does not understand semantic paraphrases. The API uses in-memory storage.</p></article>
-   <article class="feature"><div class="feature-icon">→</div><h3>Next engineering gates</h3><p>Persistent storage, authentication and tenant isolation, robust privacy detection, customer-defined scenario packs, complete report export, and payment integration.</p></article>
+   <article class="feature"><div class="feature-icon">△</div><h3>Known limitations</h3><p>The reference judge uses lexical overlap, not an independent language model. Phrase matching does not understand semantic paraphrases. Public sandbox sessions are isolated and test evidence stays in memory only; submitted test text is not saved to PostgreSQL. This is a demonstration, not a tenant-authenticated durable evidence workspace.</p></article>
+   <article class="feature"><div class="feature-icon">→</div><h3>Next engineering gates</h3><p>Secure tenant-scoped durable evidence mode, live Postgres restart/restore verification, production authentication and authorization, robust privacy detection, customer-defined scenario packs, complete report export, and integrations.</p></article>
   </div>
  </div>
 </section>
@@ -370,7 +370,8 @@ $('createRelease').addEventListener('click',async()=>{
    system_id:lastResult.systemId,
    result_ids:[lastResult.result_id],
    approver:null,
-   scenario_set_version:'public-test-v1'
+   scenario_set_version:'public-test-v1',
+   required_scenario_ids:[lastResult.scenarioId]
   })});
   const data=await response.json();
   if(!response.ok)throw new Error(data.detail||'Could not create release record ('+response.status+').');
@@ -379,7 +380,7 @@ $('createRelease').addEventListener('click',async()=>{
   const recent=journeyState.history[journeyState.history.length-1];if(recent)recent.release_status=data.status;saveJourney();
   const status=String(data.status||'unknown').replaceAll('_',' ').toUpperCase();
   $('releaseRecord').innerHTML='<div class="finding"><span class="finding-mark '+(data.status==='hold_for_repair'?'bad':'')+'">'+(data.status==='hold_for_repair'?'!':'✓')+'</span><div><strong>'+safeText(status)+'</strong><br><span style="color:#718498">Record ID: '+safeText(data.record_id||'not returned')+'</span></div></div>'+
-   '<div style="font-size:10px;color:#718498;overflow-wrap:anywhere;margin-top:10px">Configuration hash: '+safeText(data.system_config_hash||'not returned')+'<br>Evidence hash: '+safeText(data.evidence_hash||'not returned')+'<br>Critical failures: '+safeText(data.critical_failures)+' · Major failures: '+safeText(data.major_failures)+'<br>Reason codes: '+safeText((data.reason_codes||[]).join(', ')||'none returned')+'</div>';
+   '<div style="font-size:10px;color:#718498;overflow-wrap:anywhere;margin-top:10px">Configuration hash: '+safeText(data.system_config_hash||'not returned')+'<br>Evidence hash: '+safeText(data.evidence_hash||'not returned')+'<br>Critical failures: '+safeText(data.critical_failures)+' · Major failures: '+safeText(data.major_failures)+'<br>Reason codes: '+safeText((data.reason_codes||[]).join(', ')||'none returned')+'<br>Persistence: '+safeText(data.persistence||'unknown')+'<br>Required scenarios: '+safeText((data.required_scenario_ids||[]).join(', ')||'not specified')+'<br>Missing scenarios: '+safeText((data.missing_scenario_ids||[]).join(', ')||'none')+'</div><div style="margin-top:12px"><a class="btn btn-dark" href="/releases/'+encodeURIComponent(data.record_id)+'/export">Download Release Record bundle</a><p style="font-size:10px;color:#718498;margin-top:8px">The bundle detects changes to the exported record. Unless a signing key is configured, it is unsigned and does not authenticate who created it.</p></div>';
   $('releaseRecord').style.display='block';
   button.textContent='Release record created';
  }catch(err){

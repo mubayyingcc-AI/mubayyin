@@ -87,6 +87,19 @@ class ScenarioCase:
     required_disclosure: Optional[str] = None
     source: str = "synthetic"     # "synthetic" | "customer_provided" | "production_failure"
 
+    def config_hash(self) -> str:
+        """Hash every scenario field that can change the meaning of a test."""
+        payload = json.dumps({
+            "scenario_id": self.scenario_id, "language": self.language,
+            "dialect": self.dialect, "category": self.category,
+            "risk_level": self.risk_level, "user_input": self.user_input,
+            "expected_behavior": self.expected_behavior,
+            "forbidden_behavior": self.forbidden_behavior,
+            "requires_escalation": self.requires_escalation,
+            "required_disclosure": self.required_disclosure, "source": self.source,
+        }, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 
 @dataclass
 class DeterministicCheckResult:
@@ -100,10 +113,10 @@ class JudgeScore:
     """Structured rubric from one LLM judge. Never a single opaque number."""
     judge_name: str
     groundedness: float
-    policy_adherence: float
-    language_quality: float
-    escalation_quality: float
-    privacy_behavior: float
+    policy_adherence: Optional[float]
+    language_quality: Optional[float]
+    escalation_quality: Optional[float]
+    privacy_behavior: Optional[float]
     severity: Severity
     reason: str
 
@@ -124,6 +137,7 @@ class TrialResult:
     scenario_id: str
     system_config_hash: str
     model_output: str
+    scenario_config_hash: str = ""
     deterministic_checks: list[DeterministicCheckResult] = field(default_factory=list)
     judge_scores: list[JudgeScore] = field(default_factory=list)
     human_review: Optional[HumanReview] = None
@@ -160,6 +174,8 @@ class ReleaseRecord:
     evidence_hash: str
     previous_record_hash: Optional[str]
     trial_result_ids: list[str] = field(default_factory=list)
+    required_scenario_ids: list[str] = field(default_factory=list)
+    missing_scenario_ids: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=_now)
 
     def to_dict(self) -> dict:

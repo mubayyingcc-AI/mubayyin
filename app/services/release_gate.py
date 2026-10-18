@@ -36,6 +36,7 @@ class ReasonCode(str, Enum):
     HUMAN_SIGNOFF_REQUIRED = "HUMAN_SIGNOFF_REQUIRED"
     NO_APPROVER_RECORDED = "NO_APPROVER_RECORDED"
     POLICY_REQUIREMENTS_SATISFIED = "POLICY_REQUIREMENTS_SATISFIED"
+    REQUIRED_SCENARIO_COVERAGE_INCOMPLETE = "REQUIRED_SCENARIO_COVERAGE_INCOMPLETE"
 
 
 @dataclass
@@ -45,13 +46,14 @@ class ReleaseThresholds:
     require_human_signoff_above_major: bool = True
 
 
-def _evidence_hash(system: AISystem, results: list[TrialResult]) -> str:
+def _evidence_hash(system: AISystem, results: list[TrialResult], scenario_set_version: str = "v1", required_scenario_ids: list[str] | None = None, missing_scenario_ids: list[str] | None = None, thresholds: ReleaseThresholds | None = None) -> str:
     """Bind the release to exact outputs, configured checks, and human review."""
     evidence = []
     for result in sorted(results, key=lambda item: item.result_id):
         evidence.append({
             "result_id": result.result_id,
             "scenario_id": result.scenario_id,
+            "scenario_config_hash": result.scenario_config_hash,
             "output_sha256": hashlib.sha256(result.model_output.encode("utf-8")).hexdigest(),
             "final_severity": result.final_severity.value,
             "deterministic_checks": [{"passed": check.passed, "rule": check.rule, "detail": check.detail} for check in result.deterministic_checks],
@@ -73,7 +75,7 @@ def _evidence_hash(system: AISystem, results: list[TrialResult]) -> str:
                 "reviewed_at": result.human_review.reviewed_at,
             },
         })
-    payload = json.dumps({"system_config_hash": system.config_hash(), "trial_evidence": evidence}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    payload = json.dumps({"system_config_hash": system.config_hash(), "scenario_set_version": scenario_set_version, "required_scenario_ids": sorted(required_scenario_ids or []), "missing_scenario_ids": sorted(missing_scenario_ids or []), "thresholds": {"max_critical_failures": thresholds.max_critical_failures, "max_major_failures": thresholds.max_major_failures, "require_human_signoff_above_major": thresholds.require_human_signoff_above_major} if thresholds else None, "trial_evidence": evidence}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 def decide_release(
@@ -83,6 +85,7 @@ def decide_release(
     approver: str | None,
     previous_record_hash: str | None = None,
     scenario_set_version: str = "v1",
+    required_scenario_ids: list[str] | None = None,
 ) -> ReleaseRecord:
     critical = sum(1 for r in results if r.is_critical_failure())
     major = sum(1 for r in results if r.is_failure() and not r.is_critical_failure())
@@ -94,6 +97,9 @@ def decide_release(
 
     conditions: list[str] = []
     reason_codes: list[str] = []
+    required_ids = sorted(set(required_scenario_ids or []))
+    covered_ids = {r.scenario_id for r in results}
+    missing_ids = sorted(set(required_ids) - covered_ids)
 
     if critical > thresholds.max_critical_failures:
         status = ReleaseStatus.HOLD_FOR_REPAIR
@@ -116,6 +122,11 @@ def decide_release(
         reason_codes.append(ReasonCode.CRITICAL_FAILURES_ZERO.value)
         reason_codes.append(ReasonCode.POLICY_REQUIREMENTS_SATISFIED.value)
 
+    if missing_ids:
+        status = ReleaseStatus.HOLD_FOR_REPAIR
+        conditions.append(f"Required scenario coverage is incomplete; missing {len(missing_ids)} required scenario(s).")
+        reason_codes.append(ReasonCode.REQUIRED_SCENARIO_COVERAGE_INCOMPLETE.value)
+
     if status != ReleaseStatus.SAFE_TO_SERVE and not approver:
         conditions.append("No approver recorded — record is provisional, not final.")
         reason_codes.append(ReasonCode.NO_APPROVER_RECORDED.value)
@@ -133,8 +144,10 @@ def decide_release(
         conditions=conditions,
         reason_codes=reason_codes,
         approver=approver,
-        evidence_hash=_evidence_hash(system, results),
+        evidence_hash=_evidence_hash(system, results, scenario_set_version, required_ids, missing_ids, thresholds),
         previous_record_hash=previous_record_hash,
         trial_result_ids=sorted(r.result_id for r in results),
+        required_scenario_ids=required_ids,
+        missing_scenario_ids=missing_ids,
     )
     return record
