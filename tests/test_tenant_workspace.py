@@ -111,6 +111,10 @@ class DurableTenantWorkspaceTests(unittest.TestCase):
         self.assertEqual(release.status_code, 200, release.text)
         record_id = release.json()["record_id"]
         self.assertEqual(release.json()["persistence"], "durable")
+        late_review = self.client.post(f"/tenant/trials/{trial.json()['result_id']}/review", headers=headers, json={
+            "reviewer": "Late reviewer", "agrees_with_automation": False, "comment": "Attempted post-release edit"
+        })
+        self.assertEqual(late_review.status_code, 409)
 
         # The tenant API reads from PostgreSQL-backed storage, not the public sandbox's RAM maps.
         second_client = TestClient(app, base_url="https://testserver")
