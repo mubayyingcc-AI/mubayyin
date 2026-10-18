@@ -1,7 +1,7 @@
 """Mubayyin HTTP API — verified core engine and public GCC test lab."""
 from __future__ import annotations
 from pathlib import Path
-import secrets, json, os, re
+import secrets, json, os, re, uuid, hashlib
 from dataclasses import asdict
 from enum import Enum
 from typing import Optional
@@ -44,6 +44,39 @@ def _json_default(v):
  if isinstance(v,Enum):return v.value
  if hasattr(v,"__dict__"):return v.__dict__
  raise TypeError(type(v).__name__)
+def _restore_evidence_records():
+ """Rehydrate typed in-memory objects from durable evidence rows on startup."""
+ if not _database_ready or _db_engine is None:
+  return
+ try:
+  with _db_engine.connect() as c:
+   rows=c.execute(text("SELECT record_type,record_id,payload FROM mubayyin_evidence_records ORDER BY created_at ASC")).mappings().all()
+  for row in rows:
+   kind=row["record_type"];p=json.loads(row["payload"])
+   if kind=="system":
+    _systems[row["record_id"]]=AISystem(**p)
+   elif kind=="scenario":
+    _scenarios[row["record_id"]]=ScenarioCase(**p)
+   elif kind=="trial":
+    for key in ("deterministic_checks",):
+     p[key]=[DeterministicCheckResult(**x) for x in p.get(key,[])]
+    p["judge_scores"]=[JudgeScore(**{**x,"severity":Severity(x["severity"])}) for x in p.get("judge_scores",[])]
+    if p.get("human_review"):
+     hr=p["human_review"]
+     p["human_review"]=HumanReview(**{**hr,"override_severity":Severity(hr["override_severity"]) if hr.get("override_severity") else None})
+    p["final_severity"]=Severity(p["final_severity"])
+    _trial_results[row["record_id"]]=TrialResult(**p)
+   elif kind=="release":
+    p["status"]=ReleaseStatus(p["status"])
+    rec=ReleaseRecord(**p)
+    _release_records.setdefault(rec.system_id,[]).append(rec)
+  for records in _release_records.values():
+   records.sort(key=lambda r:r.created_at)
+ except Exception as e:
+  # A partial restore must never be advertised as ready for durable evidence.
+  _database_error="evidence_restore_"+type(e).__name__
+  raise RuntimeError("Mubayyin evidence restoration failed") from e
+
 def _persist(kind,rid,sid,record,immutable=False):
  if not _database_ready or _db_engine is None:
   if DATABASE_URL:raise HTTPException(503,"Durable evidence storage is unavailable; no record was confirmed.")
@@ -59,7 +92,7 @@ def _persist(kind,rid,sid,record,immutable=False):
 def startup():_initialize_storage()
 @app.get("/health",include_in_schema=False)
 def health():
- return JSONResponse({"status":"healthy","service":"mubayyin-web","version":app.version,"database":"ready" if _database_ready else ("not_configured" if not DATABASE_URL else "unavailable")})
+ return JSONResponse({"status":"ok","service":"mubayyin-web","version":app.version,"database":"ready" if _database_ready else ("not_configured" if not DATABASE_URL else "unavailable")})
 @app.get("/ready",include_in_schema=False)
 def ready():
  if DATABASE_URL and not _database_ready: raise HTTPException(503,"Database is configured but not ready.")
@@ -93,16 +126,25 @@ def website():return FileResponse(Path(__file__).parent/"static"/"index.html",me
 def arabic():return FileResponse(Path(__file__).parent/"static"/"arabic.html",media_type="text/html")
 @app.post("/systems")
 def system(req:CreateSystemRequest):
- s=AISystem(**req.dict());d=_persist("system",s.system_id,s.system_id,s);_systems[s.system_id]=s;return {"system_id":s.system_id,"config_hash":s.config_hash(),"persistence":"durable" if d else "memory_only"}
+  s=AISystem(**req.dict())
+ existing=_systems.get(s.system_id)
+ if existing and existing.config_hash()!=s.config_hash():raise HTTPException(409,"System ID already exists with a different configuration; create a new versioned system ID.")
+ d=_persist("system",s.system_id,s.system_id,s);_systems[s.system_id]=s
+ return {"system_id":s.system_id,"config_hash":s.config_hash(),"persistence":"durable" if d else "memory_only"}
 @app.post("/scenarios")
 def scenario(req:CreateScenarioRequest):
- s=ScenarioCase(**req.dict());d=_persist("scenario",s.scenario_id,"scenario:"+s.scenario_id,s);_scenarios[s.scenario_id]=s;return {"scenario_id":s.scenario_id,"persistence":"durable" if d else "memory_only"}
+  s=ScenarioCase(**req.dict())
+ existing=_scenarios.get(s.scenario_id)
+ if existing and existing.config_hash()!=s.config_hash() and any(t.scenario_id==s.scenario_id for t in _trial_results.values()):
+  raise HTTPException(409,"Scenario is already referenced by trial evidence; create a new scenario ID for changed requirements.")
+ d=_persist("scenario",s.scenario_id,"scenario:"+s.scenario_id,s);_scenarios[s.scenario_id]=s
+ return {"scenario_id":s.scenario_id,"scenario_config_hash":s.config_hash(),"persistence":"durable" if d else "memory_only"}
 @app.post("/trials")
 def trial(req:RunTrialRequest):
  s=_systems.get(req.system_id);sc=_scenarios.get(req.scenario_id)
  if not s or not sc:raise HTTPException(404,"system or scenario not found")
- r=run_trial(sc,req.model_output);r.system_config_hash=s.config_hash();d=_persist("trial",r.result_id,s.system_id,r);_trial_results[r.result_id]=r
- return {"result_id":r.result_id,"final_severity":r.final_severity.value,"is_failure":r.is_failure(),"deterministic_checks":[c.__dict__ for c in r.deterministic_checks],"judge_scores":[{"judge_name":j.judge_name,"groundedness":j.groundedness,"policy_adherence":j.policy_adherence,"language_quality":j.language_quality,"escalation_quality":j.escalation_quality,"privacy_behavior":j.privacy_behavior,"severity":j.severity.value,"reason":j.reason} for j in r.judge_scores],"system_config_hash":r.system_config_hash,"persistence":"durable" if d else "memory_only"}
+ r=run_trial(sc,req.model_output);r.system_config_hash=s.config_hash();r.scenario_config_hash=sc.config_hash();d=_persist("trial",r.result_id,s.system_id,r);_trial_results[r.result_id]=r
+ return {"result_id":r.result_id,"final_severity":r.final_severity.value,"is_failure":r.is_failure(),"deterministic_checks":[c.__dict__ for c in r.deterministic_checks],"judge_scores":[{"judge_name":j.judge_name,"groundedness":j.groundedness,"policy_adherence":j.policy_adherence,"language_quality":j.language_quality,"escalation_quality":j.escalation_quality,"privacy_behavior":j.privacy_behavior,"severity":j.severity.value,"reason":j.reason} for j in r.judge_scores],"system_config_hash":r.system_config_hash,"scenario_config_hash":r.scenario_config_hash,"persistence":"durable" if d else "memory_only"}
 @app.post("/releases")
 def release(req:DecideReleaseRequest):
  s=_systems.get(req.system_id)
@@ -110,4 +152,5 @@ def release(req:DecideReleaseRequest):
  rs=[_trial_results[x] for x in req.result_ids if x in _trial_results]
  if not rs:raise HTTPException(400,"no valid trial results provided")
  h=_release_records.setdefault(req.system_id,[]);prev=h[-1].evidence_hash if h else None
- rec=decide_release(s,rs,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,prev,req.scenario_set_version);d=_persist("release",rec.record_id,s.system_id,rec,immutable=True);h.append(rec);p=rec.to_dict();p["persistence"]="durable" if d else "memory_only";return p
+ rec=decide_release(s,rs,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,prev,req.scenario_set_version)
+ d=_persist("release",rec.record_id,s.system_id,rec,immutable=True);h.append(rec);p=rec.to_dict();p["persistence"]="durable" if d else "memory_only";return p
