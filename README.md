@@ -1,5 +1,13 @@
 # Mubayyin — Release Assurance Engine (v0.1 scaffold)
 
+## Current engineering status (draft branch)
+- Release creation can require an explicit list of scenario IDs. If any required scenario has not been tested, the record is held with a machine-readable `REQUIRED_SCENARIO_COVERAGE_INCOMPLETE` reason and lists missing scenarios.
+- Scenario definitions are immutable once referenced by trial evidence. Create a new `scenario_id` when inputs or policy expectations change so historical evidence remains interpretable.
+- Trials are bound to the AI system configuration hash and scenario configuration hash. Release creation rejects missing/duplicate result IDs, cross-system evidence, changed system configurations, and stale scenario fingerprints.
+- These are evidence-integrity controls, not proof that the evaluator understands responses semantically, that every relevant risk is covered, or that a release is compliant or safe.
+- This branch is a draft pull request and has not been merged into production. Do not treat these controls as live until reviewed, merged, deployed, and verified against the deployed service.
+
+
 This is the smallest real version of the loop in the strategy doc:
 
 ```
