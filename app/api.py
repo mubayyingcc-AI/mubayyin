@@ -210,6 +210,7 @@ def _tenant_list(tenant_id:str,kind:str,system_id:Optional[str]=None):
 def provision_tenant(req:TenantCreateRequest,authorization:Optional[str]=Header(default=None)):
  _require_admin(authorization)
  if not _database_ready or _db_engine is None:raise HTTPException(503,"Durable tenant storage is unavailable.")
+ if not req.name.strip():raise HTTPException(422,"Tenant name cannot be blank.")
  tenant_id="tenant_"+uuid.uuid4().hex[:16]
  token=secrets.token_urlsafe(40)
  token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -231,6 +232,18 @@ def rotate_tenant_key(tenant_id:str,authorization:Optional[str]=Header(default=N
  except HTTPException:raise
  except SQLAlchemyError:raise HTTPException(503,"Tenant key could not be rotated.")
  return {"tenant_id":tenant_id,"api_key":token,"key_storage":"sha256_hash_only","warning":"The previous key is now invalid. Copy this key now; it is shown only once."}
+
+@app.post("/admin/tenants/{tenant_id}/revoke")
+def revoke_tenant(tenant_id:str,authorization:Optional[str]=Header(default=None)):
+ _require_admin(authorization)
+ if not _database_ready or _db_engine is None:raise HTTPException(503,"Durable tenant storage is unavailable.")
+ try:
+  with _db_engine.begin() as conn:
+   result=conn.execute(text("UPDATE mubayyin_tenants SET revoked_at=NOW() WHERE tenant_id=:t AND revoked_at IS NULL"),{"t":tenant_id})
+   if result.rowcount!=1:raise HTTPException(404,"Active tenant not found.")
+ except HTTPException:raise
+ except SQLAlchemyError:raise HTTPException(503,"Tenant key could not be revoked.")
+ return {"tenant_id":tenant_id,"revoked":True,"evidence_retained":True}
 
 @app.get("/tenant/me")
 def tenant_identity(authorization:Optional[str]=Header(default=None)):
