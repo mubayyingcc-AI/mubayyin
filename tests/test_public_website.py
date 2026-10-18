@@ -243,7 +243,7 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertEqual(release.status_code, 409)
         self.assertIn("stale evidence", release.json()["detail"])
 
-    def test_release_rejects_trial_when_scenario_policy_changes(self):
+    def test_scenario_policy_is_immutable_after_trial_evidence_exists(self):
         system = self.client.post("/systems", json={
             "system_id": "scenario-drift-system", "name": "Synthetic assistant",
             "organization": "sandbox", "jurisdiction": "SA", "model_provider": "test",
@@ -262,12 +262,56 @@ class WebsiteAndApiTests(unittest.TestCase):
         })
         self.assertEqual(trial.status_code, 200)
         revised_scenario = {**base_scenario, "expected_behavior": "Explain the published fee schedule and exclusions."}
-        self.assertEqual(self.client.post("/scenarios", json=revised_scenario).status_code, 200)
-        release = self.client.post("/releases", json={
-            "system_id": "scenario-drift-system", "result_ids": [trial.json()["result_id"]]
+        update = self.client.post("/scenarios", json=revised_scenario)
+        self.assertEqual(update.status_code, 409)
+        self.assertIn("create a new scenario_id", update.json()["detail"])
+
+    def test_release_holds_when_required_scenario_coverage_is_incomplete(self):
+        system = self.client.post("/systems", json={
+            "system_id": "coverage-system", "name": "Synthetic assistant",
+            "organization": "sandbox", "jurisdiction": "SA", "model_provider": "test",
+            "model_version": "v1", "prompt_version": "p1", "policy_version": "v1"
         })
-        self.assertEqual(release.status_code, 409)
-        self.assertIn("stale scenario evidence", release.json()["detail"])
+        self.assertEqual(system.status_code, 200)
+        scenarios = [
+            {"scenario_id": sid, "language": "en", "category": "fees", "risk_level": "low",
+             "user_input": "Synthetic question", "expected_behavior": "Explain the relevant terms."}
+            for sid in ("coverage-scenario-present", "coverage-scenario-missing")
+        ]
+        for scenario in scenarios:
+            self.assertEqual(self.client.post("/scenarios", json=scenario).status_code, 200)
+        trial = self.client.post("/trials", json={
+            "system_id": "coverage-system", "scenario_id": "coverage-scenario-present",
+            "model_output": "Please review the relevant terms."
+        })
+        self.assertEqual(trial.status_code, 200)
+        release = self.client.post("/releases", json={
+            "system_id": "coverage-system", "result_ids": [trial.json()["result_id"]],
+            "required_scenario_ids": ["coverage-scenario-present", "coverage-scenario-missing"]
+        })
+        self.assertEqual(release.status_code, 200)
+        record = release.json()
+        self.assertEqual(record["status"], "hold_for_repair")
+        self.assertEqual(record["required_scenario_ids"], ["coverage-scenario-missing", "coverage-scenario-present"])
+        self.assertEqual(record["missing_scenario_ids"], ["coverage-scenario-missing"])
+        self.assertIn("REQUIRED_SCENARIO_COVERAGE_INCOMPLETE", record["reason_codes"])
+
+    def test_release_rejects_duplicate_required_scenario_ids(self):
+        system = self.client.post("/systems", json={
+            "system_id": "coverage-duplicate-system", "name": "Synthetic assistant",
+            "organization": "sandbox", "jurisdiction": "SA", "model_provider": "test",
+            "model_version": "v1", "prompt_version": "p1", "policy_version": "v1"
+        })
+        self.assertEqual(system.status_code, 200)
+        scenario = {"scenario_id": "coverage-duplicate-case", "language": "en", "category": "fees",
+                    "risk_level": "low", "user_input": "Synthetic question",
+                    "expected_behavior": "Explain the relevant terms."}
+        self.assertEqual(self.client.post("/scenarios", json=scenario).status_code, 200)
+        response = self.client.post("/releases", json={
+            "system_id": "coverage-duplicate-system", "result_ids": ["unused"],
+            "required_scenario_ids": ["coverage-duplicate-case", "coverage-duplicate-case"]
+        })
+        self.assertEqual(response.status_code, 422)
 
     def test_release_rejects_unknown_or_duplicate_trial_ids(self):
         response = self.client.post("/systems", json={
