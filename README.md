@@ -35,7 +35,9 @@ uvicorn app.api:app --reload
 # open http://127.0.0.1:8000/docs
 ```
 
-This wraps the tested `app/models` and `app/services` code in a FastAPI API (`/systems`, `/scenarios`, `/trials`, `/trials/{id}/review`, `/releases`). GitHub Actions runs API and public website tests. The public sandbox uses a secure, session-scoped cookie and keeps test artifacts in memory only; submitted test text is not persisted. PostgreSQL is used for consented partnership enquiries and opt-in anonymous usage events. A tenant-authenticated durable evidence mode is not yet enabled.
+This wraps the tested `app/models` and `app/services` code in a FastAPI API. The public sandbox uses a session-scoped cookie and keeps test artifacts in memory only; submitted test text is not persisted. A separate invited-pilot `/tenant/*` API now supports bearer-key authentication, tenant-scoped PostgreSQL evidence, immutable Release Records, human review, key rotation/revocation and durable evidence export. Tenant keys are stored as SHA-256 hashes. PostgreSQL is also used for consented partnership enquiries and opt-in anonymous usage events. The private tenant API still requires a real Railway create → restart → retrieve test before its durability is advertised as production-verified.
+
+Private pilot API details and security limits: [docs/private-tenant-workspace.md](docs/private-tenant-workspace.md).
 
 ## Portable Release Record export and verification
 
@@ -48,17 +50,16 @@ The English and Arabic labs can export a sandbox Release Record as a JSON eviden
 
 An unsigned hash can detect changes to the record and exported evidence but does not authenticate who created the bundle. HMAC is a shared-secret mechanism, not a public-key signature. A valid bundle does not certify AI safety or compliance, and the public sandbox's underlying evidence remains ephemeral.
 
-## What is deliberately NOT built yet (and why)
+## Remaining gaps (deliberately staged)
 
-Per the strategy doc's validation gates — none of this should be built
-before you have paying pilots and a changed production decision:
+The tenant API is an initial controlled-pilot surface, not a finished enterprise identity product. The following still require validation, security review, or paying pilot evidence:
 
-- Tenant-authenticated durable evidence mode, tenant-scoped authorization and a real Postgres create → restart → restore verification
+- Real Railway/PostgreSQL create → restart → retrieve verification, tenant-level audit logging, concurrency/transaction review and security testing
 - Real LLM judge (currently a transparent lexical-overlap stand-in in
   `app/services/evaluator.py::reference_judge` — replace with an actual
   model call behind the same `JudgeFn` signature, and add a second,
   independent judge before trusting disagreement checks)
-- Production-grade authentication/authorization, CI/CD webhooks, drift watch, SDKs
+- User-level roles, SSO/MFA, fine-grained reviewer permissions, rate limiting, a self-service private workspace UI, CI/CD webhooks, drift watch and SDKs
 - Any of the "10 organizations use this scenario library" scale — this
   scaffold ships with 10 illustrative scenarios, not a production library
 
