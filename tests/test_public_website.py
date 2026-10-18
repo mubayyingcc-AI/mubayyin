@@ -42,5 +42,18 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertIn("lexical overlap", payload["judge_scores"][0]["reason"])
         self.assertTrue(payload["system_config_hash"])
 
+        release = self.client.post("/releases", json={
+            "system_id": "test-system-1",
+            "result_ids": [payload["result_id"]],
+            "scenario_set_version": "public-test-v1"
+        })
+        self.assertEqual(release.status_code, 200)
+        record = release.json()
+        self.assertEqual(record["status"], "hold_for_repair")
+        self.assertEqual(record["critical_failures"], 1)
+        self.assertTrue(record["record_id"])
+        self.assertTrue(record["system_config_hash"])
+        self.assertTrue(record["evidence_hash"])
+
 if __name__ == "__main__":
     unittest.main()
