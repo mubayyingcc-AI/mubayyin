@@ -139,7 +139,20 @@ function showResult(data,recordId=null,tenant=false){
  $("resultOutput").textContent=JSON.stringify(data,null,2);
  $("exportActions").replaceChildren();
  if(recordId){
-  const a=document.createElement("a");a.className="button";a.href=tenant?"/tenant/releases/"+encodeURIComponent(recordId)+"/export":"/releases/"+encodeURIComponent(recordId)+"/export";a.textContent="Download evidence bundle";a.target="_blank";a.rel="noopener";$("exportActions").append(a);
+  if(tenant){
+   const button=document.createElement("button");button.textContent="Download evidence bundle";
+   button.addEventListener("click",async()=>{
+    button.disabled=true;
+    try{
+     const response=await fetch("/tenant/releases/"+encodeURIComponent(recordId)+"/export",{headers:{Authorization:"Bearer "+authKey()}});
+     if(!response.ok){let detail="Export failed ("+response.status+")";try{const d=await response.json();detail=d.detail||detail}catch{}throw new Error(detail)}
+     const blob=await response.blob();const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="mubayyin-"+recordId+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }catch(error){status("releaseStatus",error.message,"error")}finally{button.disabled=false}
+   });
+   $("exportActions").append(button);
+  }else{
+   const a=document.createElement("a");a.className="button";a.href="/releases/"+encodeURIComponent(recordId)+"/export";a.textContent="Download evidence bundle";a.target="_blank";a.rel="noopener";$("exportActions").append(a);
+  }
   $("recordId").value=recordId;
  }
 }
