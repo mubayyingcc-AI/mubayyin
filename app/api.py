@@ -128,6 +128,16 @@ def _initialize_partner_storage() -> None:
                 )
             """))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_mubayyin_partner_enquiries_created_at ON mubayyin_partner_enquiries (created_at DESC)"))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS mubayyin_usage_events (
+                    id BIGSERIAL PRIMARY KEY,
+                    visitor_id VARCHAR(36) NOT NULL,
+                    event_name VARCHAR(40) NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_mubayyin_usage_events_visitor_created ON mubayyin_usage_events (visitor_id, created_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_mubayyin_usage_events_name_created ON mubayyin_usage_events (event_name, created_at DESC)"))
         _database_ready = True
         _database_error = None
     except Exception as exc:
@@ -194,6 +204,77 @@ def create_partner_enquiry(req: PartnerEnquiryRequest):
         raise HTTPException(status_code=503, detail="We could not safely save this enquiry. No enquiry was confirmed; please retry later.")
     return {"accepted": True, "enquiry_id": enquiry_id, "message": "Your partnership enquiry was saved. Mubayyin is an early-access test lab; this is not a commercial commitment."}
 
+
+
+# Privacy-minimised product analytics: only accepted event names, a random
+# browser-generated ID, and timestamp. Never accept response text or PII.
+class UsageEventRequest(BaseModel):
+    visitor_id: str = Field(min_length=36, max_length=36)
+    event_name: str = Field(min_length=3, max_length=40)
+
+
+_ALLOWED_USAGE_EVENTS = {
+    "lab_started", "trial_completed", "release_record_created",
+    "retest_started", "journey_completed", "return_visit",
+    "partner_form_started", "partner_form_submitted"
+}
+
+
+@app.post("/usage/events", status_code=202)
+def record_usage_event(req: UsageEventRequest):
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", req.visitor_id):
+        raise HTTPException(status_code=422, detail="Invalid anonymous visitor identifier.")
+    if req.event_name not in _ALLOWED_USAGE_EVENTS:
+        raise HTTPException(status_code=422, detail="Unsupported usage event.")
+    if not _database_ready or _db_engine is None:
+        # Analytics must never break the test experience if storage is unavailable.
+        return {"accepted": False, "reason": "analytics_storage_unavailable"}
+    try:
+        with _db_engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO mubayyin_usage_events (visitor_id, event_name)
+                VALUES (:visitor_id, :event_name)
+            """), {"visitor_id": req.visitor_id.lower(), "event_name": req.event_name})
+        return {"accepted": True}
+    except SQLAlchemyError:
+        return {"accepted": False, "reason": "analytics_storage_unavailable"}
+
+
+@app.get("/partner-inbox/usage")
+def partner_usage_summary(
+    authorization: Optional[str] = Header(default=None),
+):
+    if not PARTNER_ADMIN_TOKEN:
+        raise HTTPException(status_code=503, detail="Usage analytics access is not configured.")
+    expected = "Bearer " + PARTNER_ADMIN_TOKEN
+    if not authorization or not secrets.compare_digest(authorization, expected):
+        raise HTTPException(status_code=401, detail="Valid bearer token required.")
+    if not _database_ready or _db_engine is None:
+        raise HTTPException(status_code=503, detail="Usage analytics storage is unavailable.")
+    try:
+        with _db_engine.connect() as conn:
+            totals = conn.execute(text("""
+                SELECT event_name, COUNT(*) AS event_count,
+                       COUNT(DISTINCT visitor_id) AS unique_visitors
+                FROM mubayyin_usage_events
+                WHERE created_at >= NOW() - INTERVAL '30 days'
+                GROUP BY event_name ORDER BY event_name
+            """)).mappings().all()
+            returning = conn.execute(text("""
+                SELECT COUNT(*) FROM (
+                    SELECT visitor_id FROM mubayyin_usage_events
+                    WHERE created_at >= NOW() - INTERVAL '30 days'
+                    GROUP BY visitor_id HAVING COUNT(DISTINCT DATE(created_at)) >= 2
+                ) AS returning_visitors
+            """)).scalar_one()
+        return {
+            "window_days": 30,
+            "returning_visitors_on_multiple_days": int(returning),
+            "events": [dict(row) for row in totals],
+            "definition": "A returning visitor is an opted-in anonymous browser ID with events on at least two distinct calendar dates in the last 30 days. This is a product-use signal, not proof of customer retention or paid retention."
+        }
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="Could not retrieve usage analytics.")
 
 @app.get("/partner-inbox", include_in_schema=False)
 def partner_inbox_page():
