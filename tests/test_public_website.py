@@ -252,5 +252,31 @@ class WebsiteAndApiTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 409)
 
+
+    def test_human_review_cannot_mutate_evidence_after_release_record_creation(self):
+        self.client.post("/systems", json={
+            "system_id": "immutable-review-system", "name": "test", "organization": "sandbox",
+            "jurisdiction": "SA", "model_provider": "test", "model_version": "v1",
+            "prompt_version": "v1", "policy_version": "v1"
+        })
+        self.client.post("/scenarios", json={
+            "scenario_id": "immutable-review-scenario", "language": "en", "category": "disclosure",
+            "risk_level": "low", "user_input": "synthetic", "expected_behavior": "disclose"
+        })
+        trial = self.client.post("/trials", json={
+            "system_id": "immutable-review-system", "scenario_id": "immutable-review-scenario",
+            "model_output": "sample output"
+        })
+        self.assertEqual(trial.status_code, 200)
+        rid = trial.json()["result_id"]
+        release = self.client.post("/releases", json={
+            "system_id": "immutable-review-system", "result_ids": [rid]
+        })
+        self.assertEqual(release.status_code, 200)
+        review = self.client.post(f"/trials/{rid}/review", json={
+            "reviewer": "Test reviewer", "agrees_with_automation": True, "comment": "late review"
+        })
+        self.assertEqual(review.status_code, 409)
+
 if __name__ == "__main__":
     unittest.main()
