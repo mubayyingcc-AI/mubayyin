@@ -87,6 +87,19 @@ class ScenarioCase:
     required_disclosure: Optional[str] = None
     source: str = "synthetic"     # "synthetic" | "customer_provided" | "production_failure"
 
+    def config_hash(self) -> str:
+        """Hash every scenario field that can change the meaning of a test."""
+        payload = json.dumps({
+            "scenario_id": self.scenario_id, "language": self.language,
+            "dialect": self.dialect, "category": self.category,
+            "risk_level": self.risk_level, "user_input": self.user_input,
+            "expected_behavior": self.expected_behavior,
+            "forbidden_behavior": self.forbidden_behavior,
+            "requires_escalation": self.requires_escalation,
+            "required_disclosure": self.required_disclosure, "source": self.source,
+        }, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 
 @dataclass
 class DeterministicCheckResult:
@@ -124,6 +137,7 @@ class TrialResult:
     scenario_id: str
     system_config_hash: str
     model_output: str
+    scenario_config_hash: str = ""
     deterministic_checks: list[DeterministicCheckResult] = field(default_factory=list)
     judge_scores: list[JudgeScore] = field(default_factory=list)
     human_review: Optional[HumanReview] = None
