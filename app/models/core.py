@@ -159,6 +159,7 @@ class ReleaseRecord:
     approver: Optional[str]
     evidence_hash: str
     previous_record_hash: Optional[str]
+    trial_result_ids: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=_now)
 
     def to_dict(self) -> dict:
