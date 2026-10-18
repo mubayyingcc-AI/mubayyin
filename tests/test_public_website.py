@@ -14,6 +14,9 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertIn("Release Assurance Test Lab", response.text)
         self.assertIn('id="partnerForm"', response.text)
         self.assertIn("Request free early access", response.text)
+        self.assertIn('id="journeyPanel"', response.text)
+        self.assertIn("Retest this scenario", response.text)
+        self.assertIn("analyticsConsent", response.text)
 
     def test_health_endpoint(self):
         response = self.client.get("/health")
@@ -66,6 +69,36 @@ class WebsiteAndApiTests(unittest.TestCase):
             self.assertEqual(wrong.status_code, 401)
         finally:
             api_module.PARTNER_ADMIN_TOKEN = original
+
+
+    def test_usage_event_rejects_unknown_event(self):
+        response = self.client.post("/usage/events", json={
+            "visitor_id": "00000000-0000-4000-8000-000000000000",
+            "event_name": "raw_prompt_submitted"
+        })
+        self.assertEqual(response.status_code, 422)
+
+    def test_usage_event_accepts_allowlisted_event_without_blocking_when_storage_unavailable(self):
+        original_ready = api_module._database_ready
+        original_engine = api_module._db_engine
+        api_module._database_ready = False
+        api_module._db_engine = None
+        try:
+            response = self.client.post("/usage/events", json={
+                "visitor_id": "00000000-0000-4000-8000-000000000000",
+                "event_name": "trial_completed"
+            })
+            self.assertEqual(response.status_code, 202)
+            self.assertFalse(response.json()["accepted"])
+        finally:
+            api_module._database_ready = original_ready
+            api_module._db_engine = original_engine
+
+    def test_partner_inbox_includes_opt_in_usage_summary(self):
+        response = self.client.get("/partner-inbox")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Product usage & repeat visits", response.text)
+        self.assertIn("/partner-inbox/usage", response.text)
 
     def test_trial_flow_flags_forbidden_phrase(self):
         system = self.client.post("/systems", json={
