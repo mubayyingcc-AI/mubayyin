@@ -307,5 +307,45 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertEqual(record["missing_scenario_ids"], ["coverage-scenario-b"])
         self.assertIn("REQUIRED_SCENARIO_COVERAGE_INCOMPLETE", record["reason_codes"])
 
+
+    def test_release_comparison_reports_evidence_and_decision_changes(self):
+        self.client.post("/systems", json={
+            "system_id": "compare-system", "name": "test", "organization": "sandbox",
+            "jurisdiction": "SA", "model_provider": "test", "model_version": "v1",
+            "prompt_version": "v1", "policy_version": "v1"
+        })
+        self.client.post("/scenarios", json={
+            "scenario_id": "compare-scenario", "language": "en", "category": "disclosure",
+            "risk_level": "low", "user_input": "synthetic", "expected_behavior": "disclose"
+        })
+        first = self.client.post("/trials", json={
+            "system_id": "compare-system", "scenario_id": "compare-scenario",
+            "model_output": "I disclose the approved terms."
+        })
+        self.assertEqual(first.status_code, 200)
+        base = self.client.post("/releases", json={
+            "system_id": "compare-system", "result_ids": [first.json()["result_id"]],
+            "scenario_set_version": "comparison-v1", "required_scenario_ids": ["compare-scenario"]
+        })
+        self.assertEqual(base.status_code, 200)
+        second = self.client.post("/trials", json={
+            "system_id": "compare-system", "scenario_id": "compare-scenario",
+            "model_output": "Different answer with no disclosure."
+        })
+        self.assertEqual(second.status_code, 200)
+        candidate = self.client.post("/releases", json={
+            "system_id": "compare-system", "result_ids": [second.json()["result_id"]],
+            "scenario_set_version": "comparison-v1", "required_scenario_ids": ["compare-scenario"]
+        })
+        self.assertEqual(candidate.status_code, 200)
+        response = self.client.get(
+            f'/releases/{base.json()["record_id"]}/compare/{candidate.json()["record_id"]}'
+        )
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertTrue(result["comparison"]["evidence_changed"])
+        self.assertIn(second.json()["result_id"], result["comparison"]["added_trial_result_ids"])
+        self.assertIn("interpretation", result["comparison"])
+
 if __name__ == "__main__":
     unittest.main()
