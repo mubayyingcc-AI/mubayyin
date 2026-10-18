@@ -526,6 +526,8 @@ class WebsiteAndApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Release Assurance Workspace", response.text)
         self.assertIn("sessionStorage", response.text)
+        self.assertIn("URL.createObjectURL(blob)", response.text)
+        self.assertIn('Authorization:"Bearer "+authKey()', response.text)
         self.assertIn("/tenant/systems", response.text)
         self.assertIn("/tenant/releases", response.text)
         self.assertIn("not a certification", response.text)
