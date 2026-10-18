@@ -151,6 +151,12 @@ class DurableTenantWorkspaceTests(unittest.TestCase):
         me = self.client.get("/tenant/me", headers=new_headers)
         self.assertEqual(me.status_code, 200, me.text)
         self.assertEqual(me.json()["tenant_id"], tenant["tenant_id"])
+        revoked = self.client.post(
+            f'/admin/tenants/{tenant["tenant_id"]}/revoke',
+            headers=self.admin_headers,
+        )
+        self.assertEqual(revoked.status_code, 200, revoked.text)
+        self.assertEqual(self.client.get("/tenant/me", headers=new_headers).status_code, 401)
 
     def test_tenant_evidence_endpoints_fail_closed_without_database(self):
         api_module._database_ready = False
