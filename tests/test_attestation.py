@@ -28,6 +28,19 @@ class ReleaseAttestationTests(unittest.TestCase):
         self.assertFalse(tampered["integrity_valid"])
         self.assertEqual(tampered["status"], "payload_hash_mismatch")
 
+
+    def test_evidence_is_bound_to_the_bundle_hash(self):
+        bundle = create_release_bundle(
+            self.record,
+            evidence={"trials": [{"result_id": "trial-1", "model_output": "synthetic output"}]},
+            signing_key="",
+        )
+        self.assertTrue(verify_release_bundle(bundle, signing_key="")["integrity_valid"])
+        bundle["evidence"]["trials"][0]["model_output"] = "changed after export"
+        result = verify_release_bundle(bundle, signing_key="")
+        self.assertFalse(result["integrity_valid"])
+        self.assertEqual(result["status"], "payload_hash_mismatch")
+
     def test_hmac_bundle_requires_the_correct_key(self):
         bundle = create_release_bundle(self.record, signing_key="test-secret-key")
         verified = verify_release_bundle(bundle, signing_key="test-secret-key")
