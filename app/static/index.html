@@ -213,7 +213,7 @@ $('createRelease').addEventListener('click',async()=>{
   if(!response.ok)throw new Error(data.detail||'Could not create release record ('+response.status+').');
   lastResult.releaseRecord=data;
   const status=String(data.status||'unknown').replaceAll('_',' ').toUpperCase();
-  $('releaseRecord').innerHTML='<div class="finding"><span class="finding-mark '+(data.status==='hold_for_repair'?'bad':'')+'">✓</span><div><strong>'+safeText(status)+'</strong><br><span style="color:#718498">Record ID: '+safeText(data.record_id||'not returned')+'</span></div></div>'+
+  $('releaseRecord').innerHTML='<div class="finding"><span class="finding-mark '+(data.status==='hold_for_repair'?'bad':'')+'">'+(data.status==='hold_for_repair'?'!':'✓')+'</span><div><strong>'+safeText(status)+'</strong><br><span style="color:#718498">Record ID: '+safeText(data.record_id||'not returned')+'</span></div></div>'+
    '<div style="font-size:10px;color:#718498;overflow-wrap:anywhere;margin-top:10px">Configuration hash: '+safeText(data.system_config_hash||'not returned')+'<br>Evidence hash: '+safeText(data.evidence_hash||'not returned')+'<br>Critical failures: '+safeText(data.critical_failures)+' · Major failures: '+safeText(data.major_failures)+'<br>Reason codes: '+safeText((data.reason_codes||[]).join(', ')||'none returned')+'</div>';
   $('releaseRecord').style.display='block';
   button.textContent='Release record created';
