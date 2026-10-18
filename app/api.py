@@ -239,7 +239,7 @@ def revoke_tenant(tenant_id:str,authorization:Optional[str]=Header(default=None)
  if not _database_ready or _db_engine is None:raise HTTPException(503,"Durable tenant storage is unavailable.")
  try:
   with _db_engine.begin() as conn:
-   result=conn.execute(text("UPDATE mubayyin_tenants SET revoked_at=NOW() WHERE tenant_id=:t AND revoked_at IS NULL"),{"t":tenant_id})
+   result=conn.execute(text("UPDATE mubayyin_tenants SET revoked_at=CURRENT_TIMESTAMP WHERE tenant_id=:t AND revoked_at IS NULL"),{"t":tenant_id})
    if result.rowcount!=1:raise HTTPException(404,"Active tenant not found.")
  except HTTPException:raise
  except SQLAlchemyError:raise HTTPException(503,"Tenant key could not be revoked.")
