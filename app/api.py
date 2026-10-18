@@ -136,6 +136,193 @@ def _persist(kind,rid,sid,record,immutable=False):
    else:c.execute(text("INSERT INTO mubayyin_evidence_records(record_type,record_id,system_id,payload) VALUES(:k,:r,:s,:p) ON CONFLICT(record_type,record_id) DO UPDATE SET payload=EXCLUDED.payload,system_id=EXCLUDED.system_id"),dict(k=kind,r=rid,s=sid,p=payload))
  except SQLAlchemyError:raise HTTPException(503,"Evidence storage failed; no durable record was confirmed.")
  return True
+
+def _require_admin(authorization:Optional[str])->None:
+ if not PARTNER_ADMIN_TOKEN:raise HTTPException(503,"Tenant provisioning is not configured.")
+ if not authorization or not secrets.compare_digest(authorization,"Bearer "+PARTNER_ADMIN_TOKEN):
+  raise HTTPException(401,"Valid administrator bearer token required.")
+
+def _require_tenant(authorization:Optional[str])->str:
+ if not _database_ready or _db_engine is None:raise HTTPException(503,"Durable tenant storage is unavailable.")
+ if not authorization or not authorization.startswith("Bearer "):
+  raise HTTPException(401,"Tenant API key bearer token required.")
+ token=authorization[7:].strip()
+ if len(token)<32:raise HTTPException(401,"Invalid tenant API key.")
+ token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
+ try:
+  with _db_engine.connect() as conn:
+   row=conn.execute(text("SELECT tenant_id FROM mubayyin_tenants WHERE token_hash=:h AND revoked_at IS NULL"),{"h":token_hash}).mappings().first()
+ except SQLAlchemyError:raise HTTPException(503,"Tenant authentication storage is unavailable.")
+ if not row:raise HTTPException(401,"Invalid or revoked tenant API key.")
+ return row["tenant_id"]
+
+def _tenant_store(tenant_id:str,kind:str,record_id:str,system_id:str,record,immutable:bool=False)->None:
+ if not _database_ready or _db_engine is None:raise HTTPException(503,"Durable tenant storage is unavailable.")
+ raw=asdict(record) if hasattr(record,"__dataclass_fields__") else record
+ payload=json.dumps(raw,sort_keys=True,separators=(",",":"),default=_json_default)
+ try:
+  with _db_engine.begin() as conn:
+   if immutable:
+    result=conn.execute(text("INSERT INTO mubayyin_tenant_evidence_records(tenant_id,record_type,record_id,system_id,payload) VALUES(:t,:k,:r,:s,:p) ON CONFLICT(tenant_id,record_type,record_id) DO NOTHING"),{"t":tenant_id,"k":kind,"r":record_id,"s":system_id,"p":payload})
+    if result.rowcount!=1:raise HTTPException(409,"Immutable Release Record ID already exists.")
+   else:
+    conn.execute(text("INSERT INTO mubayyin_tenant_evidence_records(tenant_id,record_type,record_id,system_id,payload) VALUES(:t,:k,:r,:s,:p) ON CONFLICT(tenant_id,record_type,record_id) DO UPDATE SET payload=EXCLUDED.payload,system_id=EXCLUDED.system_id"),{"t":tenant_id,"k":kind,"r":record_id,"s":system_id,"p":payload})
+ except HTTPException:raise
+ except SQLAlchemyError:raise HTTPException(503,"Tenant evidence could not be stored durably.")
+
+def _tenant_decode(kind:str,p:dict):
+ if kind=="system":return AISystem(**p)
+ if kind=="scenario":return ScenarioCase(**p)
+ if kind=="trial":
+  p["deterministic_checks"]=[DeterministicCheckResult(**x) for x in p.get("deterministic_checks",[])]
+  p["judge_scores"]=[JudgeScore(**{**x,"severity":Severity(x["severity"])}) for x in p.get("judge_scores",[])]
+  if p.get("human_review"):
+   hr=p["human_review"]
+   p["human_review"]=HumanReview(**{**hr,"override_severity":Severity(hr["override_severity"]) if hr.get("override_severity") else None})
+  p["final_severity"]=Severity(p["final_severity"])
+  return TrialResult(**p)
+ if kind=="release":
+  p["status"]=ReleaseStatus(p["status"])
+  return ReleaseRecord(**p)
+ return p
+
+def _tenant_get(tenant_id:str,kind:str,record_id:str):
+ if not _database_ready or _db_engine is None:raise HTTPException(503,"Durable tenant storage is unavailable.")
+ try:
+  with _db_engine.connect() as conn:
+   row=conn.execute(text("SELECT payload,system_id FROM mubayyin_tenant_evidence_records WHERE tenant_id=:t AND record_type=:k AND record_id=:r"),{"t":tenant_id,"k":kind,"r":record_id}).mappings().first()
+ except SQLAlchemyError:raise HTTPException(503,"Tenant evidence could not be read.")
+ if not row:return None
+ return _tenant_decode(kind,json.loads(row["payload"]))
+
+def _tenant_list(tenant_id:str,kind:str,system_id:Optional[str]=None):
+ if not _database_ready or _db_engine is None:raise HTTPException(503,"Durable tenant storage is unavailable.")
+ try:
+  with _db_engine.connect() as conn:
+   if system_id is None:
+    rows=conn.execute(text("SELECT record_id,system_id,payload FROM mubayyin_tenant_evidence_records WHERE tenant_id=:t AND record_type=:k ORDER BY created_at ASC,record_id ASC"),{"t":tenant_id,"k":kind}).mappings().all()
+   else:
+    rows=conn.execute(text("SELECT record_id,system_id,payload FROM mubayyin_tenant_evidence_records WHERE tenant_id=:t AND record_type=:k AND system_id=:s ORDER BY created_at ASC,record_id ASC"),{"t":tenant_id,"k":kind,"s":system_id}).mappings().all()
+ except SQLAlchemyError:raise HTTPException(503,"Tenant evidence could not be listed.")
+ return [(row["record_id"],row["system_id"],_tenant_decode(kind,json.loads(row["payload"]))) for row in rows]
+
+@app.post("/admin/tenants",status_code=201)
+def provision_tenant(req:TenantCreateRequest,authorization:Optional[str]=Header(default=None)):
+ _require_admin(authorization)
+ if not _database_ready or _db_engine is None:raise HTTPException(503,"Durable tenant storage is unavailable.")
+ tenant_id="tenant_"+uuid.uuid4().hex[:16]
+ token=secrets.token_urlsafe(40)
+ token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
+ try:
+  with _db_engine.begin() as conn:
+   conn.execute(text("INSERT INTO mubayyin_tenants(tenant_id,name,token_hash) VALUES(:t,:n,:h)"),{"t":tenant_id,"n":req.name.strip(),"h":token_hash})
+ except SQLAlchemyError:raise HTTPException(503,"Tenant could not be provisioned.")
+ return {"tenant_id":tenant_id,"name":req.name.strip(),"api_key":token,"key_storage":"sha256_hash_only","warning":"Copy this key now. It is shown only once. Store it in a secret manager; do not commit it or place it in public browser code."}
+
+@app.post("/admin/tenants/{tenant_id}/rotate-key")
+def rotate_tenant_key(tenant_id:str,authorization:Optional[str]=Header(default=None)):
+ _require_admin(authorization)
+ if not _database_ready or _db_engine is None:raise HTTPException(503,"Durable tenant storage is unavailable.")
+ token=secrets.token_urlsafe(40);token_hash=hashlib.sha256(token.encode("utf-8")).hexdigest()
+ try:
+  with _db_engine.begin() as conn:
+   result=conn.execute(text("UPDATE mubayyin_tenants SET token_hash=:h WHERE tenant_id=:t AND revoked_at IS NULL"),{"h":token_hash,"t":tenant_id})
+   if result.rowcount!=1:raise HTTPException(404,"Active tenant not found.")
+ except HTTPException:raise
+ except SQLAlchemyError:raise HTTPException(503,"Tenant key could not be rotated.")
+ return {"tenant_id":tenant_id,"api_key":token,"key_storage":"sha256_hash_only","warning":"The previous key is now invalid. Copy this key now; it is shown only once."}
+
+@app.get("/tenant/me")
+def tenant_identity(authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ try:
+  with _db_engine.connect() as conn:
+   row=conn.execute(text("SELECT tenant_id,name,created_at FROM mubayyin_tenants WHERE tenant_id=:t"),{"t":tenant_id}).mappings().first()
+ except SQLAlchemyError:raise HTTPException(503,"Tenant profile could not be read.")
+ return {"tenant_id":row["tenant_id"],"name":row["name"],"created_at":str(row["created_at"]),"evidence_storage":"durable_postgresql"}
+
+@app.post("/tenant/systems")
+def tenant_create_system(req:CreateSystemRequest,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization);system=AISystem(**req.dict())
+ existing=_tenant_get(tenant_id,"system",system.system_id)
+ if existing and existing.config_hash()!=system.config_hash():
+  raise HTTPException(409,"System ID already exists with a different configuration; use a new versioned system ID.")
+ if existing:return {"system_id":existing.system_id,"config_hash":existing.config_hash(),"persistence":"durable"}
+ _tenant_store(tenant_id,"system",system.system_id,system.system_id,system)
+ return {"system_id":system.system_id,"config_hash":system.config_hash(),"persistence":"durable"}
+
+@app.post("/tenant/scenarios")
+def tenant_create_scenario(req:CreateScenarioRequest,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization);scenario=ScenarioCase(**req.dict())
+ existing=_tenant_get(tenant_id,"scenario",scenario.scenario_id)
+ if existing and existing.config_hash()!=scenario.config_hash():
+  referenced=any(trial.scenario_id==scenario.scenario_id for _,_,trial in _tenant_list(tenant_id,"trial"))
+  if referenced:raise HTTPException(409,"Scenario is already referenced by trial evidence; create a new scenario ID.")
+ _tenant_store(tenant_id,"scenario",scenario.scenario_id,"scenario:"+scenario.scenario_id,scenario)
+ return {"scenario_id":scenario.scenario_id,"scenario_config_hash":scenario.config_hash(),"persistence":"durable"}
+
+@app.post("/tenant/trials")
+def tenant_run_trial(req:RunTrialRequest,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ system=_tenant_get(tenant_id,"system",req.system_id);scenario=_tenant_get(tenant_id,"scenario",req.scenario_id)
+ if not system or not scenario:raise HTTPException(404,"Tenant system or scenario not found.")
+ result=run_trial(scenario,req.model_output)
+ result.system_config_hash=system.config_hash();result.scenario_config_hash=scenario.config_hash()
+ _tenant_store(tenant_id,"trial",result.result_id,system.system_id,result)
+ return {"result_id":result.result_id,"system_id":system.system_id,"scenario_id":scenario.scenario_id,"final_severity":result.final_severity.value,"is_failure":result.is_failure(),"system_config_hash":result.system_config_hash,"scenario_config_hash":result.scenario_config_hash,"deterministic_checks":[asdict(x) for x in result.deterministic_checks],"judge_scores":[{**asdict(x),"severity":x.severity.value} for x in result.judge_scores],"persistence":"durable"}
+
+@app.post("/tenant/releases")
+def tenant_create_release(req:DecideReleaseRequest,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ system=_tenant_get(tenant_id,"system",req.system_id)
+ if not system:raise HTTPException(404,"Tenant system not found.")
+ if len(req.result_ids)!=len(set(req.result_ids)):raise HTTPException(422,"Duplicate trial result IDs are not allowed.")
+ if len(req.required_scenario_ids)!=len(set(req.required_scenario_ids)):raise HTTPException(422,"Duplicate required scenario IDs are not allowed.")
+ for scenario_id in req.required_scenario_ids:
+  if not _tenant_get(tenant_id,"scenario",scenario_id):raise HTTPException(404,"One or more required scenarios were not found.")
+ trials=[]
+ for result_id in req.result_ids:
+  trial=_tenant_get(tenant_id,"trial",result_id)
+  if not trial:raise HTTPException(404,"One or more tenant trial results were not found.")
+  if trial.system_config_hash!=system.config_hash():raise HTTPException(409,"Trial evidence is stale for the current system configuration; rerun the scenario.")
+  scenario=_tenant_get(tenant_id,"scenario",trial.scenario_id)
+  if not scenario or trial.scenario_config_hash!=scenario.config_hash():raise HTTPException(409,"Trial evidence is stale for the current scenario configuration; rerun the scenario.")
+  row=next((x for x in _tenant_list(tenant_id,"trial") if x[0]==result_id),None)
+  if not row or row[1]!=req.system_id:raise HTTPException(409,"Trial evidence belongs to a different system.")
+  trials.append(trial)
+ if not trials:raise HTTPException(400,"No valid trial results provided.")
+ previous_records=[rec for _,_,rec in _tenant_list(tenant_id,"release",req.system_id)]
+ previous_hash=previous_records[-1].evidence_hash if previous_records else None
+ record=decide_release(system,trials,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,previous_hash,req.scenario_set_version,req.required_scenario_ids)
+ _tenant_store(tenant_id,"release",record.record_id,system.system_id,record,immutable=True)
+ payload=record.to_dict();payload["persistence"]="durable";payload["tenant_id"]=tenant_id
+ return payload
+
+@app.get("/tenant/releases/{record_id}")
+def tenant_get_release(record_id:str,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization);record=_tenant_get(tenant_id,"release",record_id)
+ if not record:raise HTTPException(404,"Tenant Release Record not found.")
+ payload=record.to_dict();payload["persistence"]="durable";return payload
+
+@app.get("/tenant/releases/{record_id}/export")
+def tenant_export_release(record_id:str,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization);record=_tenant_get(tenant_id,"release",record_id)
+ if not record:raise HTTPException(404,"Tenant Release Record not found.")
+ trials=[];scenario_ids=set(record.required_scenario_ids)
+ for trial_id in record.trial_result_ids:
+  trial=_tenant_get(tenant_id,"trial",trial_id)
+  if not trial:raise HTTPException(409,"Referenced trial evidence is missing from durable storage.")
+  trials.append(asdict(trial));scenario_ids.add(trial.scenario_id)
+ scenarios=[]
+ for scenario_id in sorted(scenario_ids):
+  scenario=_tenant_get(tenant_id,"scenario",scenario_id)
+  if not scenario:raise HTTPException(409,"Referenced scenario definition is missing from durable storage.")
+  scenarios.append({**asdict(scenario),"scenario_config_hash":scenario.config_hash()})
+ evidence={"format":"mubayyin-trial-evidence.v1","trials":trials,"scenarios":scenarios,"scope":"Tenant-authenticated durable evidence referenced by this Release Record."}
+ bundle=create_release_bundle(record.to_dict(),evidence=evidence)
+ body=json.dumps(bundle,ensure_ascii=False,sort_keys=True,indent=2)
+ return Response(content=body,media_type="application/json",headers={"Content-Disposition":f'attachment; filename="mubayyin-{record_id}.json"'})
+
 @app.on_event("startup")
 def startup():
  _initialize_storage()
