@@ -46,7 +46,7 @@ class AssessActionRequest(BaseModel):
  action_type:str=Field(min_length=1,max_length=80);resource_id:str=Field(min_length=1,max_length=160)
  currency:str=Field(min_length=3,max_length=3);amount:str=Field(min_length=1,max_length=40)
  proposed_at:str;delegation_path:list[str]=Field(default_factory=list,max_length=30)
- prior_execution_detected:bool=False;context_complete:bool=True;evaluated_at:Optional[str]=None
+ prior_execution_detected:bool=False;context_complete:bool=True
 
 DATABASE_URL=os.getenv("DATABASE_URL","");PARTNER_ADMIN_TOKEN=os.getenv("PARTNER_ADMIN_TOKEN","");TENANT_ADMIN_TOKEN=os.getenv("MUBAYYIN_TENANT_ADMIN_TOKEN","");_db_engine=None;_database_ready=False;_database_error=None
 def _prune_expired_sandbox_sessions():
@@ -303,7 +303,8 @@ def tenant_assess_action(req:AssessActionRequest,authorization:Optional[str]=Hea
   revocation=_tenant_get(tenant_id,"action_mandate_revocation",req.mandate_id)
   mandate=ActionMandate(**{**stored,"permitted_actions":tuple(stored["permitted_actions"]),"permitted_delegates":tuple(stored.get("permitted_delegates",[])),"state":MandateState.REVOKED if revocation else MandateState(stored.get("state","active")),"revoked_at":revocation.get("revoked_at") if revocation else stored.get("revoked_at")})
   proposal=ProposedAction(request_id=req.request_id,principal_id=req.principal_id,actor_id=req.actor_id,action_type=req.action_type,resource_id=req.resource_id,currency=req.currency.upper(),amount=req.amount,proposed_at=req.proposed_at,delegation_path=tuple(req.delegation_path),prior_execution_detected=req.prior_execution_detected,context_complete=req.context_complete)
-  result=assess_action(mandate,proposal,req.evaluated_at)
+  from datetime import datetime, timezone
+  result=assess_action(mandate,proposal,datetime.now(timezone.utc).isoformat())
  except ValueError as e:raise HTTPException(422,str(e))
  _tenant_store(tenant_id,"action_assessment",result.assessment_id,mandate.mandate_id,result.to_dict(),immutable=True)
  return result.to_dict()
