@@ -34,14 +34,14 @@ class HumanReviewRequest(BaseModel): reviewer:str;agrees_with_automation:bool;ov
 class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1";required_scenario_ids:list[str]=Field(default_factory=list)
 class TenantCreateRequest(BaseModel): name:str=Field(min_length=2,max_length=160)
 class CreateActionMandateRequest(BaseModel):
- mandate_id:str=Field(min_length=1,max_length=80);mandate_version:str=Field(min_length=1,max_length=80);policy_version:str=Field(min_length=1,max_length=80)
+ mandate_id:str=Field(min_length=1,max_length=80,pattern=r"^[A-Za-z0-9._:-]+$");mandate_version:str=Field(min_length=1,max_length=80);policy_version:str=Field(min_length=1,max_length=80)
  principal_id:str=Field(min_length=1,max_length=160);authorised_actor_id:str=Field(min_length=1,max_length=160)
  permitted_actions:list[str]=Field(min_length=1,max_length=30);resource_id:str=Field(min_length=1,max_length=160)
  currency:str=Field(min_length=3,max_length=3);maximum_amount:str=Field(min_length=1,max_length=40)
  issued_at:str;expires_at:str;permitted_delegates:list[str]=Field(default_factory=list,max_length=30)
  human_confirmation_required:bool=False
 class AssessActionRequest(BaseModel):
- assessment_id:Optional[str]=None;mandate_id:str=Field(min_length=1,max_length=80)
+ mandate_id:str=Field(min_length=1,max_length=80,pattern=r"^[A-Za-z0-9._:-]+$")
  request_id:str=Field(min_length=1,max_length=120);principal_id:str=Field(min_length=1,max_length=160);actor_id:str=Field(min_length=1,max_length=160)
  action_type:str=Field(min_length=1,max_length=80);resource_id:str=Field(min_length=1,max_length=160)
  currency:str=Field(min_length=3,max_length=3);amount:str=Field(min_length=1,max_length=40)
