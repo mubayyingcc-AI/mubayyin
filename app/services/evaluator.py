@@ -159,6 +159,7 @@ def run_trial(
         scenario_id=scenario.scenario_id,
         system_config_hash="",  # filled in by caller once system is known
         model_output=model_output,
+        scenario_config_hash=scenario.config_hash(),
         deterministic_checks=det_results,
         judge_scores=judge_scores,
         human_review=None,
