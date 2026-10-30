@@ -109,6 +109,8 @@ def assess_action(mandate: ActionMandate, proposal: ProposedAction, evaluated_at
         reasons.append("MANDATE_REVOKED")
     if mandate.revoked_at and _instant(mandate.revoked_at, "revoked_at") <= now:
         reasons.append("MANDATE_REVOKED")
+    if now < issued or proposed < issued:
+        reasons.append("MANDATE_NOT_YET_EFFECTIVE")
     if now >= expiry:
         reasons.append("MANDATE_EXPIRED")
     if proposal.principal_id != mandate.principal_id:
@@ -131,7 +133,7 @@ def assess_action(mandate: ActionMandate, proposal: ProposedAction, evaluated_at
         if any(node not in mandate.permitted_delegates for node in proposal.delegation_path):
             reasons.append("DELEGATION_OUTSIDE_MANDATE")
     hard_failures = {
-        "MANDATE_REVOKED", "MANDATE_EXPIRED", "PRINCIPAL_MISMATCH", "ACTOR_NOT_AUTHORISED",
+        "MANDATE_REVOKED", "MANDATE_EXPIRED", "MANDATE_NOT_YET_EFFECTIVE", "PRINCIPAL_MISMATCH", "ACTOR_NOT_AUTHORISED",
         "ACTION_OUTSIDE_MANDATE", "RESOURCE_MISMATCH", "CURRENCY_MISMATCH",
         "AMOUNT_EXCEEDS_LIMIT", "POSSIBLE_DUPLICATE_EXECUTION",
         "DELEGATION_PATH_INCONSISTENT", "DELEGATION_OUTSIDE_MANDATE",
