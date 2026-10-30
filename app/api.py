@@ -377,7 +377,7 @@ def tenant_assess_release_path(record_id:str,req:RiskAssessmentRequest,authoriza
  record=_tenant_get(tenant_id,"release",record_id)
  if not record:raise HTTPException(404,"Tenant Release Record not found.")
  snapshot=_tenant_get(tenant_id,"system_version_snapshot",req.snapshot_id)
- if not snapshot or snapshot.get("system_id")!=record.system_id:raise HTTPException(404,"System version snapshot not found for this Release Record.")
+ if not snapshot or snapshot.get("system_id")!=record.system_id or snapshot.get("system_config_hash")!=record.system_config_hash:raise HTTPException(409,"System version snapshot does not match the exact Release Record configuration.")
  trials=[_tenant_get(tenant_id,"trial",trial_id) for trial_id in record.trial_result_ids]
  if any(item is None for item in trials):raise HTTPException(409,"Release Record references missing trial evidence.")
  mandatory_checks_passed=bool(trials) and all(all(check.passed for check in trial.deterministic_checks) and bool(trial.deterministic_checks) for trial in trials)
@@ -401,19 +401,32 @@ def tenant_release_continuity(record_id:str,authorization:Optional[str]=Header(d
  tenant_id=_require_tenant(authorization)
  record=_tenant_get(tenant_id,"release",record_id)
  if not record:raise HTTPException(404,"Tenant Release Record not found.")
- releases=[item for _,_,item in _tenant_list(tenant_id,"release",record.system_id)]
- snapshots=[item for _,_,item in _tenant_list(tenant_id,"system_version_snapshot",record.system_id)]
- return {"schema_version":"mubayyin.release-continuity.v1","system_id":record.system_id,"current_record_id":record_id,"release_records":[item.to_dict() for item in releases],"version_snapshots":snapshots,"previous_record_hash":record.previous_record_hash,"continuity_count":len(releases)}
+ all_snapshots=[item for _,_,item in _tenant_list(tenant_id,"system_version_snapshot")]
+ by_hash={item.get("snapshot_hash"):item for item in all_snapshots}
+ current=next((item for item in all_snapshots if item.get("system_id")==record.system_id and item.get("system_config_hash")==record.system_config_hash),None)
+ chain=[];seen=set();cursor=current
+ while cursor:
+  digest=cursor.get("snapshot_hash")
+  if not digest or digest in seen:raise HTTPException(409,"Version snapshot lineage contains a cycle or invalid hash.")
+  seen.add(digest);chain.append(cursor)
+  predecessor_hash=cursor.get("predecessor_snapshot_hash")
+  cursor=by_hash.get(predecessor_hash) if predecessor_hash else None
+ system_ids={item.get("system_id") for item in chain}
+ system_ids.add(record.system_id)
+ all_releases=[item for _,_,item in _tenant_list(tenant_id,"release") if item.system_id in system_ids]
+ all_releases.sort(key=lambda item:item.created_at)
+ return {"schema_version":"mubayyin.release-continuity.v1","system_id":record.system_id,"current_record_id":record_id,"release_records":[item.to_dict() for item in all_releases],"version_chain":list(reversed(chain)),"previous_record_hash":record.previous_record_hash,"continuity_count":len(all_releases)}
 
 @app.get("/tenant/integrations/releases/{record_id}")
 def tenant_release_interoperability(record_id:str,authorization:Optional[str]=Header(default=None)):
  tenant_id=_require_tenant(authorization)
  record=_tenant_get(tenant_id,"release",record_id)
  if not record:raise HTTPException(404,"Tenant Release Record not found.")
- snapshots=[item for _,_,item in _tenant_list(tenant_id,"system_version_snapshot",record.system_id)]
+ continuity=tenant_release_continuity(record_id,authorization)
+ chain=continuity["version_chain"]
+ current=next((item for item in chain if item.get("system_id")==record.system_id and item.get("system_config_hash")==record.system_config_hash),None)
  risk=_tenant_get(tenant_id,"risk_assessment",record_id)
- continuity={"schema_version":"mubayyin.release-continuity.v1","system_id":record.system_id,"current_record_id":record_id,"previous_record_hash":record.previous_record_hash,"continuity_count":len(_tenant_list(tenant_id,"release",record.system_id)),"version_snapshots":snapshots}
- payload=build_release_interoperability_payload(record.to_dict(),snapshots[-1] if snapshots else None,continuity,risk)
+ payload=build_release_interoperability_payload(record.to_dict(),current,continuity,risk)
  payload["tenant_id"]=tenant_id
  return payload
 
