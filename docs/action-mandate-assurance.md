@@ -6,7 +6,7 @@
 ### Product boundary
 Mubayyin remains an independent AI release-assurance and evidence platform. This capability extends assessment coverage to consequential actions. It does not turn Mubayyin into an agent framework, payment processor, identity provider, or action-execution service.
 
-The library evaluates one proposed action against one versioned mandate snapshot. It returns a decision and integrity fingerprints. It does not execute, block, retry, reverse, or compensate for an action. A separately controlled customer execution system must enforce the result.
+The library evaluates one proposed action against one versioned mandate snapshot. It checks the mandate issuance and expiry window, revocation, actor, principal, action, resource, currency, amount, delegation constraints, duplicate-execution signal and context completeness. It returns a decision and integrity fingerprints. It does not execute, block, retry, reverse, or compensate for an action. A separately controlled customer execution system must enforce the result.
 
 ### Mubayyin terminology
 
