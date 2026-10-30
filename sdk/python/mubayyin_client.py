@@ -96,6 +96,20 @@ class MubayyinClient:
         return self._request("GET", f"/tenant/releases/{record_id}")
     def export_release(self, record_id: str) -> dict[str, Any]:
         return self._request("GET", f"/tenant/releases/{record_id}/export")
+    def create_version_snapshot(self, system_id: str, change_manifest: list[dict[str, Any]], predecessor_snapshot_id: str | None = None) -> dict[str, Any]:
+        payload = {"change_manifest": change_manifest, "predecessor_snapshot_id": predecessor_snapshot_id}
+        return self._request("POST", f"/tenant/systems/{system_id}/version-snapshots", payload)
+    def list_version_snapshots(self, system_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/tenant/systems/{system_id}/version-snapshots")
+    def assess_release_path(self, record_id: str, snapshot_id: str, policy_version: str = "risk-policy.v1", human_authorization_required_by_policy: bool = False) -> dict[str, Any]:
+        payload = {"snapshot_id": snapshot_id, "policy_version": policy_version, "human_authorization_required_by_policy": human_authorization_required_by_policy}
+        return self._request("POST", f"/tenant/releases/{record_id}/risk-assessment", payload)
+    def get_release_risk_assessment(self, record_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/tenant/releases/{record_id}/risk-assessment")
+    def get_release_continuity(self, record_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/tenant/releases/{record_id}/continuity")
+    def get_interoperability_release(self, record_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/tenant/integrations/releases/{record_id}")
     def verify_bundle(self, bundle: Mapping[str, Any]) -> dict[str, Any]:
         """Ask the public verifier to check a downloaded JSON evidence bundle."""
         return self._request("POST", "/releases/verify", bundle)
