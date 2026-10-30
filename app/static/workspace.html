@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Mubayyin Private Pilot Workspace</title>
+<style>
+:root{color-scheme:dark;--bg:#08121d;--panel:#101e2b;--line:#26394a;--text:#eef4f8;--muted:#9db0c1;--accent:#7ce0c3;--warn:#ffce83;--bad:#ff9b9b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1080px;margin:auto;padding:28px 18px 70px}.top{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap}
+h1,h2,h3{line-height:1.2}h1{font-size:clamp(28px,4vw,42px);margin:8px 0}h2{font-size:20px;margin-top:0}.eyebrow{font-size:11px;letter-spacing:.16em;color:var(--accent);text-transform:uppercase}
+p{color:var(--muted)}.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin:18px 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field{display:flex;flex-direction:column;gap:5px}.field.full{grid-column:1/-1}
+label{font-size:12px;color:#c2d0dc}input,select,textarea{width:100%;padding:11px 12px;border:1px solid #354a5e;border-radius:9px;background:#091621;color:var(--text);font:inherit}textarea{min-height:90px;resize:vertical}
+button,.button{border:0;border-radius:9px;padding:11px 15px;background:var(--accent);color:#07231d;font-weight:750;cursor:pointer;text-decoration:none;display:inline-block}button:disabled{opacity:.55;cursor:wait}.secondary{background:#243747;color:var(--text)}.danger{background:#442a2a;color:#ffdede}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.notice{border-left:3px solid var(--warn);padding:10px 13px;background:#201d17;border-radius:6px;color:#f5dfbd;font-size:13px}
+.status{font-size:13px;color:var(--muted);margin-top:8px}.status.ok{color:var(--accent)}.status.error{color:var(--bad)}.muted{color:var(--muted);font-size:12px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#071019;border:1px solid var(--line);padding:14px;border-radius:10px;max-height:520px;overflow:auto;font-size:12px}
+.hidden{display:none}.tag{display:inline-block;padding:4px 8px;border-radius:999px;background:#1d3340;color:var(--accent);font-size:11px}
+@media(max-width:650px){.grid{grid-template-columns:1fr}.panel{padding:15px}main{padding:20px 12px 50px}}
+</style>
+</head>
+<body>
+<main>
+<header class="top">
+ <div><div class="eyebrow">Mubayyin · Private pilot</div><h1>Release Assurance Workspace</h1><p>Run a tenant-scoped test, review the finding, and create a durable Release Record.</p></div>
+ <a class="button secondary" href="/">Public lab</a>
+</header>
+<div class="notice">Invited-pilot API only. Use synthetic or explicitly approved test data. This evaluator is not a certification, does not provide semantic Arabic assurance, and must not be treated as proof of production safety. Your API key is kept in this tab's session storage and is sent only in Authorization headers to this site.</div>
+
+<section class="panel" id="loginPanel">
+ <h2>Connect your pilot workspace</h2>
+ <p>Enter the tenant API key supplied by your Mubayyin administrator. The key is not saved to the server or local storage.</p>
+ <div class="field"><label for="apiKey">Tenant API key</label><input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste invited-pilot key"></div>
+ <div class="actions"><button id="connectBtn">Connect securely</button></div><div class="status" id="loginStatus" role="status"></div>
+</section>
+
+<div id="workspace" class="hidden">
+ <section class="panel top">
+  <div><span class="tag">Connected</span><h2 id="tenantName">Private tenant</h2><div class="muted" id="tenantMeta"></div></div>
+  <button id="disconnectBtn" class="secondary">Disconnect this tab</button>
+ </section>
+
+ <section class="panel">
+  <h2>1 · Register the system version</h2>
+  <form id="systemForm" class="grid">
+   <div class="field"><label for="systemId">System ID (versioned)</label><input id="systemId" required maxlength="80" placeholder="bank-assistant-v1"></div>
+   <div class="field"><label for="systemName">System name</label><input id="systemName" required maxlength="120" placeholder="Customer support assistant"></div>
+   <div class="field"><label for="organization">Organization</label><input id="organization" required maxlength="120"></div>
+   <div class="field"><label for="jurisdiction">Jurisdiction</label><input id="jurisdiction" required maxlength="40" value="SA"></div>
+   <div class="field"><label for="provider">Model provider</label><input id="provider" required maxlength="80"></div>
+   <div class="field"><label for="modelVersion">Model version</label><input id="modelVersion" required maxlength="80" value="v1"></div>
+   <div class="field"><label for="promptVersion">Prompt version</label><input id="promptVersion" required maxlength="80" value="v1"></div>
+   <div class="field"><label for="policyVersion">Policy version</label><input id="policyVersion" required maxlength="80" value="v1"></div>
+   <div class="field full"><button type="submit">Save system configuration</button></div>
+  </form><div class="status" id="systemStatus" role="status"></div>
+ </section>
+
+ <section class="panel">
+  <h2>2 · Define a required scenario</h2>
+  <form id="scenarioForm" class="grid">
+   <div class="field"><label for="scenarioId">Scenario ID</label><input id="scenarioId" required maxlength="80" placeholder="sa-fee-disclosure-01"></div>
+   <div class="field"><label for="language">Language</label><select id="language"><option value="ar">Arabic</option><option value="en">English</option><option value="ar-en">Arabic + English</option></select></div>
+   <div class="field"><label for="dialect">Dialect (optional)</label><input id="dialect" maxlength="40" placeholder="Saudi"></div>
+   <div class="field"><label for="category">Risk / policy category</label><input id="category" required maxlength="80" placeholder="financial_disclosure"></div>
+   <div class="field"><label for="riskLevel">Risk level</label><select id="riskLevel"><option>low</option><option selected>medium</option><option>high</option></select></div>
+   <div class="field"><label for="requiredDisclosure">Required disclosure (optional)</label><input id="requiredDisclosure" maxlength="1000" placeholder="Fees may apply."></div>
+   <div class="field full"><label for="userInput">Synthetic user input</label><textarea id="userInput" required maxlength="4000" placeholder="Use synthetic, non-confidential text."></textarea></div>
+   <div class="field full"><label for="expectedBehavior">Expected behavior</label><textarea id="expectedBehavior" required maxlength="4000"></textarea></div>
+   <div class="field full"><label for="forbiddenBehavior">Forbidden behavior (optional)</label><textarea id="forbiddenBehavior" maxlength="1000"></textarea></div>
+   <div class="field full"><label for="sensitiveMarkers">Sensitive-data canaries (comma-separated; synthetic or explicitly approved values only)</label><input id="sensitiveMarkers" maxlength="2000" placeholder="e.g. synthetic account ID 88442211"></div>
+   <div class="field"><label><input id="requiresEscalation" type="checkbox" style="width:auto"> Requires human escalation</label></div>
+   <div class="field"><label for="scenarioSource">Scenario source</label><select id="scenarioSource"><option value="synthetic">Synthetic</option><option value="customer_provided">Customer-provided (approved only)</option></select></div>
+   <div class="field full"><button type="submit">Save scenario</button></div>
+  </form><div class="status" id="scenarioStatus" role="status"></div>
+ </section>
+
+ <section class="panel">
+  <h2>3 · Run a trial</h2>
+  <form id="trialForm" class="grid">
+   <div class="field"><label for="trialSystemId">System ID</label><input id="trialSystemId" required maxlength="80"></div>
+   <div class="field"><label for="trialScenarioId">Scenario ID</label><input id="trialScenarioId" required maxlength="80"></div>
+   <div class="field full"><label for="modelOutput">AI response under test</label><textarea id="modelOutput" required maxlength="20000" placeholder="Paste a response only if you are authorized to use it. Synthetic output is recommended."></textarea></div>
+   <div class="field full"><button type="submit">Run and save trial</button></div>
+  </form><div class="status" id="trialStatus" role="status"></div>
+ </section>
+
+ <section class="panel">
+  <h2>4 · Human review before release</h2>
+  <form id="reviewForm" class="grid">
+   <div class="field"><label for="reviewResultId">Trial result ID</label><input id="reviewResultId" required maxlength="80"></div>
+   <div class="field"><label for="reviewer">Reviewer label</label><input id="reviewer" required maxlength="120"></div>
+   <div class="field"><label for="agrees">Agrees with automated result?</label><select id="agrees"><option value="true">Yes</option><option value="false">No</option></select></div>
+   <div class="field"><label for="overrideSeverity">Override severity (optional)</label><select id="overrideSeverity"><option value="">No override</option><option value="none">None</option><option value="minor">Minor</option><option value="major">Major</option><option value="critical">Critical</option></select></div>
+   <div class="field full"><label for="reviewComment">Review note</label><textarea id="reviewComment" maxlength="3000"></textarea></div>
+   <div class="field full"><button type="submit">Save human review</button></div>
+  </form><div class="status" id="reviewStatus" role="status"></div>
+ </section>
+
+ <section class="panel">
+  <h2>5 · Create the Release Record</h2>
+  <form id="releaseForm" class="grid">
+   <div class="field"><label for="releaseSystemId">System ID</label><input id="releaseSystemId" required maxlength="80"></div>
+   <div class="field"><label for="scenarioSetVersion">Scenario set version</label><input id="scenarioSetVersion" required maxlength="80" value="pilot-v1"></div>
+   <div class="field full"><label for="resultIds">Trial result IDs (comma-separated)</label><input id="resultIds" required placeholder="trial_x, trial_y"></div>
+   <div class="field full"><label for="requiredScenarioIds">Required scenario IDs (comma-separated)</label><input id="requiredScenarioIds" required placeholder="scenario_a, scenario_b"></div>
+   <div class="field"><label for="approver">Approver label (optional)</label><input id="approver" maxlength="120"></div>
+   <div class="field"><label for="maxCritical">Maximum critical failures</label><input id="maxCritical" type="number" min="0" max="100" value="0" required></div>
+   <div class="field"><label for="maxMajor">Maximum major failures</label><input id="maxMajor" type="number" min="0" max="100" value="3" required></div>
+   <div class="field full"><button type="submit">Create immutable Release Record</button></div>
+  </form><div class="status" id="releaseStatus" role="status"></div>
+ </section>
+
+ <section class="panel">
+  <h2>6 · Retrieve and export</h2>
+  <form id="retrieveForm" class="grid">
+   <div class="field"><label for="recordId">Release Record ID</label><input id="recordId" required maxlength="80"></div>
+   <div class="field"><label>&nbsp;</label><button type="submit" class="secondary">Retrieve durable record</button></div>
+  </form>
+  <div class="actions" id="exportActions"></div><pre id="resultOutput" aria-live="polite">Results will appear here.</pre>
+ </section>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const KEY_NAME="mubayyin_tenant_api_key";
+function status(id,message,kind=""){const el=$(id);el.textContent=message;el.className="status "+kind}
+function authKey(){return sessionStorage.getItem(KEY_NAME)||""}
+async function api(path,method="GET",body=null){
+ const headers={Authorization:"Bearer "+authKey()};
+ if(body!==null)headers["Content-Type"]="application/json";
+ const response=await fetch(path,{method,headers,body:body===null?undefined:JSON.stringify(body)});
+ let data={};try{data=await response.json()}catch{}
+ if(!response.ok)throw new Error(data.detail||data.message||("Request failed ("+response.status+")"));
+ return data
+}
+function csv(id){return $(id).value.split(",").map(x=>x.trim()).filter(Boolean)}
+function showResult(data,recordId=null,tenant=false){
+ $("resultOutput").textContent=JSON.stringify(data,null,2);
+ $("exportActions").replaceChildren();
+ if(recordId){
+  if(tenant){
+   const button=document.createElement("button");button.textContent="Download evidence bundle";
+   button.addEventListener("click",async()=>{
+    button.disabled=true;
+    try{
+     const response=await fetch("/tenant/releases/"+encodeURIComponent(recordId)+"/export",{headers:{Authorization:"Bearer "+authKey()}});
+     if(!response.ok){let detail="Export failed ("+response.status+")";try{const d=await response.json();detail=d.detail||detail}catch{}throw new Error(detail)}
+     const blob=await response.blob();const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="mubayyin-"+recordId+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }catch(error){status("releaseStatus",error.message,"error")}finally{button.disabled=false}
+   });
+   $("exportActions").append(button);
+  }else{
+   const a=document.createElement("a");a.className="button";a.href="/releases/"+encodeURIComponent(recordId)+"/export";a.textContent="Download evidence bundle";a.target="_blank";a.rel="noopener";$("exportActions").append(a);
+  }
+  $("recordId").value=recordId;
+ }
+}
+async function connect(key){
+ const response=await fetch("/tenant/me",{headers:{Authorization:"Bearer "+key}});
+ let data={};try{data=await response.json()}catch{}
+ if(!response.ok)throw new Error(data.detail||"Tenant authentication failed.");
+ sessionStorage.setItem(KEY_NAME,key);
+ $("tenantName").textContent=data.name;
+ $("tenantMeta").textContent="Tenant ID: "+data.tenant_id+" · Storage: "+data.evidence_storage;
+ $("loginPanel").classList.add("hidden");$("workspace").classList.remove("hidden");
+ status("loginStatus","Connected.","ok");
+}
+$("connectBtn").addEventListener("click",async()=>{
+ const key=$("apiKey").value.trim();if(!key){status("loginStatus","Enter your tenant API key.","error");return}
+ $("connectBtn").disabled=true;
+ try{await connect(key);$("apiKey").value=""}catch(e){status("loginStatus",e.message,"error")}finally{$("connectBtn").disabled=false}
+});
+$("disconnectBtn").addEventListener("click",()=>{sessionStorage.removeItem(KEY_NAME);$("workspace").classList.add("hidden");$("loginPanel").classList.remove("hidden");status("loginStatus","Disconnected. Key removed from this tab.","ok")});
+$("systemForm").addEventListener("submit",async e=>{
+ e.preventDefault();try{const d=await api("/tenant/systems","POST",{system_id:$("systemId").value.trim(),name:$("systemName").value.trim(),organization:$("organization").value.trim(),jurisdiction:$("jurisdiction").value.trim(),model_provider:$("provider").value.trim(),model_version:$("modelVersion").value.trim(),prompt_version:$("promptVersion").value.trim(),policy_version:$("policyVersion").value.trim()});$("trialSystemId").value=$("systemId").value;$("releaseSystemId").value=$("systemId").value;status("systemStatus","Saved durably. Config hash: "+d.config_hash,"ok")}catch(e){status("systemStatus",e.message,"error")}
+});
+$("scenarioForm").addEventListener("submit",async e=>{
+ e.preventDefault();try{const d=await api("/tenant/scenarios","POST",{scenario_id:$("scenarioId").value.trim(),language:$("language").value,dialect:$("dialect").value.trim()||null,category:$("category").value.trim(),risk_level:$("riskLevel").value,user_input:$("userInput").value,expected_behavior:$("expectedBehavior").value,forbidden_behavior:$("forbiddenBehavior").value.trim()||null,sensitive_markers:csv("sensitiveMarkers"),requires_escalation:$("requiresEscalation").checked,required_disclosure:$("requiredDisclosure").value.trim()||null,source:$("scenarioSource").value});$("trialScenarioId").value=$("scenarioId").value;$("requiredScenarioIds").value=$("scenarioId").value;status("scenarioStatus","Scenario saved durably. Hash: "+d.scenario_config_hash,"ok")}catch(e){status("scenarioStatus",e.message,"error")}
+});
+$("trialForm").addEventListener("submit",async e=>{
+ e.preventDefault();try{const d=await api("/tenant/trials","POST",{system_id:$("trialSystemId").value.trim(),scenario_id:$("trialScenarioId").value.trim(),model_output:$("modelOutput").value});$("reviewResultId").value=d.result_id;$("resultIds").value=d.result_id;showResult(d);status("trialStatus","Trial saved durably. Severity: "+d.final_severity+"; failure: "+d.is_failure,"ok")}catch(e){status("trialStatus",e.message,"error")}
+});
+$("reviewForm").addEventListener("submit",async e=>{
+ e.preventDefault();try{const d=await api("/tenant/trials/"+encodeURIComponent($("reviewResultId").value.trim())+"/review","POST",{reviewer:$("reviewer").value.trim(),agrees_with_automation:$("agrees").value==="true",override_severity:$("overrideSeverity").value||null,comment:$("reviewComment").value});showResult(d);status("reviewStatus","Human review saved durably.","ok")}catch(e){status("reviewStatus",e.message,"error")}
+});
+$("releaseForm").addEventListener("submit",async e=>{
+ e.preventDefault();try{const d=await api("/tenant/releases","POST",{system_id:$("releaseSystemId").value.trim(),result_ids:csv("resultIds"),required_scenario_ids:csv("requiredScenarioIds"),scenario_set_version:$("scenarioSetVersion").value.trim(),approver:$("approver").value.trim()||null,max_critical_failures:Number($("maxCritical").value),max_major_failures:Number($("maxMajor").value)});showResult(d,d.record_id,true);status("releaseStatus","Durable Release Record created: "+d.status,"ok")}catch(e){status("releaseStatus",e.message,"error")}
+});
+$("retrieveForm").addEventListener("submit",async e=>{
+ e.preventDefault();try{const id=$("recordId").value.trim();const d=await api("/tenant/releases/"+encodeURIComponent(id));showResult(d,id,true);status("releaseStatus","Retrieved from tenant storage.","ok")}catch(e){showResult({error:e.message});status("releaseStatus",e.message,"error")}
+});
+(async()=>{const key=authKey();if(key){try{await connect(key)}catch(e){sessionStorage.removeItem(KEY_NAME);status("loginStatus","Saved tab key is no longer valid. Reconnect with a current key.","error")}}})();
+</script>
+</body>
+</html>

@@ -85,11 +85,20 @@ class ScenarioCase:
     forbidden_behavior: Optional[str] = None
     requires_escalation: bool = False
     required_disclosure: Optional[str] = None
+    sensitive_markers: list[str] = field(default_factory=list)
     source: str = "synthetic"     # "synthetic" | "customer_provided" | "production_failure"
 
     def config_hash(self) -> str:
-        """Fingerprint the exact scenario policy and test input used."""
-        payload = json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        """Hash every scenario field that can change the meaning of a test."""
+        payload = json.dumps({
+            "scenario_id": self.scenario_id, "language": self.language,
+            "dialect": self.dialect, "category": self.category,
+            "risk_level": self.risk_level, "user_input": self.user_input,
+            "expected_behavior": self.expected_behavior,
+            "forbidden_behavior": self.forbidden_behavior,
+            "requires_escalation": self.requires_escalation,
+            "required_disclosure": self.required_disclosure, "sensitive_markers": sorted(self.sensitive_markers), "source": self.source,
+        }, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -105,10 +114,10 @@ class JudgeScore:
     """Structured rubric from one LLM judge. Never a single opaque number."""
     judge_name: str
     groundedness: float
-    policy_adherence: float
-    language_quality: float
-    escalation_quality: float
-    privacy_behavior: float
+    policy_adherence: Optional[float]
+    language_quality: Optional[float]
+    escalation_quality: Optional[float]
+    privacy_behavior: Optional[float]
     severity: Severity
     reason: str
 
@@ -129,7 +138,6 @@ class TrialResult:
     scenario_id: str
     system_config_hash: str
     model_output: str
-    # Empty default keeps older stored records readable; empty hashes are rejected for new release decisions.
     scenario_config_hash: str = ""
     deterministic_checks: list[DeterministicCheckResult] = field(default_factory=list)
     judge_scores: list[JudgeScore] = field(default_factory=list)
