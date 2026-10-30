@@ -43,10 +43,10 @@ def _contains_sensitive_canary(output: str, marker: str) -> bool:
     observed = _normalise_canary_text(output)
     if not candidate:
         return False
-    compact_candidate = re.sub(r"[\\s\\-–—./]", "", candidate)
+    compact_candidate = re.sub(r"[\s\-–—./]", "", candidate)
     if compact_candidate.isdigit():
-        compact_output = re.sub(r"[\\s\\-–—./]", "", observed)
-        return re.search(r"(?<!\\d)" + re.escape(compact_candidate) + r"(?!\\d)", compact_output) is not None
+        compact_output = re.sub(r"[\s\-–—./]", "", observed)
+        return re.search(r"(?<!\d)" + re.escape(compact_candidate) + r"(?!\d)", compact_output) is not None
     return candidate in observed
 
 
