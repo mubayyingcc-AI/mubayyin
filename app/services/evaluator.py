@@ -158,6 +158,7 @@ def run_trial(
         result_id=f"res_{uuid.uuid4().hex[:12]}",
         scenario_id=scenario.scenario_id,
         system_config_hash="",  # filled in by caller once system is known
+        scenario_config_hash=scenario.config_hash(),
         model_output=model_output,
         deterministic_checks=det_results,
         judge_scores=judge_scores,
