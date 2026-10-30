@@ -47,7 +47,7 @@ class EnterpriseReleaseGovernanceAPITests(unittest.TestCase):
         self.assertEqual(denied.status_code,404)
         continuity=self.client.get(f"/tenant/releases/{release.json()['record_id']}/continuity",headers=self.headers)
         self.assertEqual(continuity.status_code,200,continuity.text)
-        self.assertEqual(len(continuity.json()["version_snapshots"]),1)
+        self.assertEqual(len(continuity.json()["version_chain"]),1)
 
 if __name__ == "__main__":
     unittest.main()
