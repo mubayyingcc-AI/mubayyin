@@ -41,7 +41,7 @@ class CreateActionMandateRequest(BaseModel):
  issued_at:str;expires_at:str;permitted_delegates:list[str]=Field(default_factory=list,max_length=30)
  human_confirmation_required:bool=False
 class AssessActionRequest(BaseModel):
- assessment_id:str=Field(min_length=1,max_length=80);mandate_id:str=Field(min_length=1,max_length=80)
+ assessment_id:Optional[str]=None;mandate_id:str=Field(min_length=1,max_length=80)
  request_id:str=Field(min_length=1,max_length=120);principal_id:str=Field(min_length=1,max_length=160);actor_id:str=Field(min_length=1,max_length=160)
  action_type:str=Field(min_length=1,max_length=80);resource_id:str=Field(min_length=1,max_length=160)
  currency:str=Field(min_length=3,max_length=3);amount:str=Field(min_length=1,max_length=40)
@@ -283,17 +283,28 @@ def tenant_create_action_mandate(req:CreateActionMandateRequest,authorization:Op
  _tenant_store(tenant_id,"action_mandate",mandate.mandate_id,mandate.mandate_id,payload,immutable=True)
  return {"mandate_id":mandate.mandate_id,"mandate_version":mandate.mandate_version,"policy_version":mandate.policy_version,"state":mandate.state.value,"storage":"tenant_scoped_postgresql","interpretation":"Stored mandate snapshot; this endpoint does not grant authority or execute actions."}
 
+
+@app.post("/tenant/action-mandates/{mandate_id}/revoke",status_code=201)
+def tenant_revoke_action_mandate(mandate_id:str,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ stored=_tenant_get(tenant_id,"action_mandate",mandate_id)
+ if not stored:raise HTTPException(404,"Action Mandate not found for this tenant.")
+ from datetime import datetime, timezone
+ event={"mandate_id":mandate_id,"revoked_at":datetime.now(timezone.utc).isoformat(),"event":"mandate_revoked"}
+ _tenant_store(tenant_id,"action_mandate_revocation",mandate_id,mandate_id,event,immutable=True)
+ return {"mandate_id":mandate_id,"revoked":True,"revoked_at":event["revoked_at"],"evidence_storage":"tenant_scoped_postgresql"}
+
 @app.post("/tenant/action-assessments",status_code=201)
 def tenant_assess_action(req:AssessActionRequest,authorization:Optional[str]=Header(default=None)):
  tenant_id=_require_tenant(authorization)
  stored=_tenant_get(tenant_id,"action_mandate",req.mandate_id)
  if not stored:raise HTTPException(404,"Action Mandate not found for this tenant.")
  try:
-  mandate=ActionMandate(**{**stored,"permitted_actions":tuple(stored["permitted_actions"]),"permitted_delegates":tuple(stored.get("permitted_delegates",[])),"state":MandateState(stored.get("state","active"))})
+  revocation=_tenant_get(tenant_id,"action_mandate_revocation",req.mandate_id)
+  mandate=ActionMandate(**{**stored,"permitted_actions":tuple(stored["permitted_actions"]),"permitted_delegates":tuple(stored.get("permitted_delegates",[])),"state":MandateState.REVOKED if revocation else MandateState(stored.get("state","active")),"revoked_at":revocation.get("revoked_at") if revocation else stored.get("revoked_at")})
   proposal=ProposedAction(request_id=req.request_id,principal_id=req.principal_id,actor_id=req.actor_id,action_type=req.action_type,resource_id=req.resource_id,currency=req.currency.upper(),amount=req.amount,proposed_at=req.proposed_at,delegation_path=tuple(req.delegation_path),prior_execution_detected=req.prior_execution_detected,context_complete=req.context_complete)
   result=assess_action(mandate,proposal,req.evaluated_at)
  except ValueError as e:raise HTTPException(422,str(e))
- if req.assessment_id!=result.assessment_id:raise HTTPException(409,"assessment_id must equal the deterministic assessment ID returned by the assessment engine.")
  _tenant_store(tenant_id,"action_assessment",result.assessment_id,mandate.mandate_id,result.to_dict(),immutable=True)
  return result.to_dict()
 
