@@ -14,7 +14,7 @@ from app.models.core import AISystem, ScenarioCase, HumanReview, Severity, Deter
 from app.services.evaluator import run_trial
 from app.services.release_gate import decide_release, ReleaseThresholds
 from app.services.attestation import create_release_bundle, verify_release_bundle
-from app.services.release_governance import create_version_snapshot, assess_release_path, build_release_interoperability_payload
+from app.services.release_governance import create_version_snapshot, assess_release_path, build_release_interoperability_payload, canonical_hash
 app=FastAPI(title="Mubayyin Release Assurance API",description="Vendor-neutral AI release-assurance engine — GCC beachhead.",version="0.2.0")
 @app.middleware("http")
 async def prevent_sensitive_response_caching(request:Request,call_next):
@@ -404,22 +404,54 @@ def tenant_release_continuity(record_id:str,authorization:Optional[str]=Header(d
  tenant_id=_require_tenant(authorization)
  record=_tenant_get(tenant_id,"release",record_id)
  if not record:raise HTTPException(404,"Tenant Release Record not found.")
- all_snapshots=[item for _,_,item in _tenant_list(tenant_id,"system_version_snapshot")]
- by_hash={item.get("snapshot_hash"):item for item in all_snapshots}
- current=next((item for item in all_snapshots if item.get("system_id")==record.system_id and item.get("system_config_hash")==record.system_config_hash),None)
- chain=[];seen=set();cursor=current
+ all_releases=[item for _,_,item in _tenant_list(tenant_id,"release")]
+ releases_by_hash={item.evidence_hash:item for item in all_releases if item.evidence_hash}
+ release_chain=[];seen_release_hashes=set();cursor=record
  while cursor:
-  digest=cursor.get("snapshot_hash")
-  if not digest or digest in seen:raise HTTPException(409,"Version snapshot lineage contains a cycle or invalid hash.")
-  seen.add(digest);chain.append(cursor)
-  predecessor_hash=cursor.get("predecessor_snapshot_hash")
-  if predecessor_hash and predecessor_hash not in by_hash:raise HTTPException(409,"Predecessor version snapshot is missing from tenant evidence.")
-  cursor=by_hash.get(predecessor_hash) if predecessor_hash else None
- system_ids={item.get("system_id") for item in chain}
- system_ids.add(record.system_id)
- all_releases=[item for _,_,item in _tenant_list(tenant_id,"release") if item.system_id in system_ids]
- all_releases.sort(key=lambda item:item.created_at)
- return {"schema_version":"mubayyin.release-continuity.v1","system_id":record.system_id,"current_record_id":record_id,"release_records":[item.to_dict() for item in all_releases],"version_chain":list(reversed(chain)),"previous_record_hash":record.previous_record_hash,"continuity_count":len(all_releases)}
+  digest=cursor.evidence_hash
+  if not digest or digest in seen_release_hashes:raise HTTPException(409,"Release Record history contains a cycle or invalid evidence hash.")
+  seen_release_hashes.add(digest);release_chain.append(cursor)
+  predecessor_hash=cursor.previous_record_hash
+  if predecessor_hash:
+   if predecessor_hash not in releases_by_hash:raise HTTPException(409,"A predecessor Release Record is missing from tenant evidence.")
+   cursor=releases_by_hash[predecessor_hash]
+  else:cursor=None
+ release_chain.reverse()
+ all_snapshots=[item for _,_,item in _tenant_list(tenant_id,"system_version_snapshot")]
+ by_hash={item.get("snapshot_hash"):item for item in all_snapshots if item.get("snapshot_hash")}
+ current_risk=_tenant_get(tenant_id,"risk_assessment",record_id)
+ current=None
+ if current_risk and current_risk.get("snapshot_id"):
+  current=next((item for item in all_snapshots if item.get("snapshot_id")==current_risk["snapshot_id"]),None)
+ else:
+  matches=[item for item in all_snapshots if item.get("system_id")==record.system_id and item.get("system_config_hash")==record.system_config_hash]
+  if len(matches)>1:raise HTTPException(409,"Multiple snapshots match this Release Record; exact snapshot binding is required.")
+  current=matches[0] if matches else None
+ chain=[];seen_snapshot_hashes=set();snapshot_cursor=current
+ while snapshot_cursor:
+  digest=snapshot_cursor.get("snapshot_hash")
+  if not digest or digest in seen_snapshot_hashes:raise HTTPException(409,"Version snapshot lineage contains a cycle or invalid hash.")
+  hash_payload={key:value for key,value in snapshot_cursor.items() if key not in {"snapshot_hash","snapshot_id"}}
+  if canonical_hash(hash_payload)!=digest:raise HTTPException(409,"Version snapshot content does not match its stored fingerprint.")
+  seen_snapshot_hashes.add(digest);chain.append(snapshot_cursor)
+  predecessor_hash=snapshot_cursor.get("predecessor_snapshot_hash")
+  if predecessor_hash:
+   predecessor=by_hash.get(predecessor_hash)
+   if not predecessor:raise HTTPException(409,"Predecessor version snapshot is missing from tenant evidence.")
+   if snapshot_cursor.get("predecessor_system_id")!=predecessor.get("system_id"):raise HTTPException(409,"Version snapshot predecessor identity does not match its linked fingerprint.")
+   snapshot_cursor=predecessor
+  else:
+   if snapshot_cursor.get("predecessor_system_id") is not None:raise HTTPException(409,"Version snapshot declares a predecessor identity without a predecessor fingerprint.")
+   snapshot_cursor=None
+ chain.reverse()
+ chain_hashes={item.get("snapshot_hash") for item in chain}
+ for release in release_chain:
+  risk=_tenant_get(tenant_id,"risk_assessment",release.record_id)
+  if risk:
+   linked=next((item for item in all_snapshots if item.get("snapshot_id")==risk.get("snapshot_id")),None)
+   if not linked or linked.get("snapshot_hash") not in chain_hashes:raise HTTPException(409,"Release Record snapshot binding is outside the verified version lineage.")
+   if linked.get("system_id")!=release.system_id or linked.get("system_config_hash")!=release.system_config_hash:raise HTTPException(409,"Release Record configuration does not match its bound version snapshot.")
+ return {"schema_version":"mubayyin.release-continuity.v1","system_id":record.system_id,"current_record_id":record_id,"release_records":[item.to_dict() for item in release_chain],"version_chain":chain,"previous_record_hash":record.previous_record_hash,"continuity_count":len(release_chain)}
 
 @app.get("/tenant/integrations/releases/{record_id}")
 def tenant_release_interoperability(record_id:str,authorization:Optional[str]=Header(default=None)):
