@@ -460,8 +460,8 @@ def tenant_release_interoperability(record_id:str,authorization:Optional[str]=He
  if not record:raise HTTPException(404,"Tenant Release Record not found.")
  continuity=tenant_release_continuity(record_id,authorization)
  chain=continuity["version_chain"]
- current=next((item for item in chain if item.get("system_id")==record.system_id and item.get("system_config_hash")==record.system_config_hash),None)
  risk=_tenant_get(tenant_id,"risk_assessment",record_id)
+ current=next((item for item in chain if item.get("snapshot_id")==risk.get("snapshot_id")),None) if risk and risk.get("snapshot_id") else next((item for item in chain if item.get("system_id")==record.system_id and item.get("system_config_hash")==record.system_config_hash),None)
  payload=build_release_interoperability_payload(record.to_dict(),current,continuity,risk)
  payload["tenant_id"]=tenant_id
  return payload
