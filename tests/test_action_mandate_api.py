@@ -7,7 +7,8 @@ from app import api
 class ActionMandateApiTests(unittest.TestCase):
     def setUp(self):
         self.rows = {}
-        self.auth = patch.object(api, "_require_tenant", return_value="tenant-test")
+        self.current_tenant = "tenant-test"
+        self.auth = patch.object(api, "_require_tenant", side_effect=lambda authorization: self.current_tenant)
         self.auth.start()
         self.addCleanup(self.auth.stop)
         def store(tenant, kind, rid, sid, payload, immutable=False):
@@ -48,6 +49,28 @@ class ActionMandateApiTests(unittest.TestCase):
         self.assertIn(result["decision"],("permitted","review_required","rejected"))
         self.assertTrue(result["evidence_fingerprint"])
         self.assertIn(("tenant-test","action_assessment",result["assessment_id"]),self.rows)
+
+    def test_second_tenant_cannot_read_or_assess_first_tenants_mandate(self):
+        from fastapi import HTTPException
+        self.create_mandate()
+        self.current_tenant = "tenant-other"
+        req=api.AssessActionRequest(
+            mandate_id="m-1",request_id="r-cross-tenant",principal_id="customer-1",
+            actor_id="agent-1",action_type="prepare_refund",resource_id="case-1",
+            currency="AED",amount="50",proposed_at=datetime.now(timezone.utc).isoformat())
+        with self.assertRaises(HTTPException) as caught:
+            api.tenant_assess_action(req)
+        self.assertEqual(caught.exception.status_code,404)
+        self.assertNotIn(("tenant-other","action_assessment","r-cross-tenant"),self.rows)
+
+    def test_second_tenant_cannot_revoke_first_tenants_mandate(self):
+        from fastapi import HTTPException
+        self.create_mandate()
+        self.current_tenant = "tenant-other"
+        with self.assertRaises(HTTPException) as caught:
+            api.tenant_revoke_action_mandate("m-1")
+        self.assertEqual(caught.exception.status_code,404)
+        self.assertNotIn(("tenant-other","action_mandate_revocation","m-1"),self.rows)
 
     def test_revocation_is_recorded_and_subsequent_assessment_rejected(self):
         self.create_mandate()
