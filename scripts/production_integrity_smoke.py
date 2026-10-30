@@ -253,7 +253,6 @@ def verify():
             risk2.get("release_path") == "MANDATORY_HUMAN_AUTHORIZATION",
             "Version 2 risk assessment did not survive or is not bound to the exact snapshot.")
 
-    status, denied = request("GET", f"/tenant/releases/{state['release_v2_id']}/continuity", token=other_token) if False else (None, None)
     # The control tenant must not be able to read the owner's evidence. A 404 is expected.
     try:
         request("GET", f"/tenant/releases/{state['release_v2_id']}/continuity", token=other_token)
