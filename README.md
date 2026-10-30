@@ -50,6 +50,10 @@ The English and Arabic labs can export a sandbox Release Record as a JSON eviden
 
 An unsigned hash can detect changes to the record and exported evidence but does not authenticate who created the bundle. HMAC is a shared-secret mechanism, not a public-key signature. A valid bundle does not certify AI safety or compliance, and the public sandbox's underlying evidence remains ephemeral.
 
+## Action Mandate Assurance (new feature branch)
+
+A separate deterministic assessment capability evaluates whether a proposed financial-service action matches a versioned Action Mandate. Its original bilingual terminology is documented in [docs/action-mandate-assurance.md](docs/action-mandate-assurance.md). It adds tenant-scoped invited-pilot endpoints for mandate creation, revocation, action assessment and evidence retrieval. It does not execute or block actions; the customer-controlled execution system must enforce decisions. The assessment engine has a dedicated synthetic test suite. This feature is not yet merged into main or deployed.
+
 ## Remaining gaps (deliberately staged)
 
 The tenant API is an initial controlled-pilot surface, not a finished enterprise identity product. The following still require validation, security review, or paying pilot evidence:
