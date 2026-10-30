@@ -410,6 +410,7 @@ def tenant_release_continuity(record_id:str,authorization:Optional[str]=Header(d
   if not digest or digest in seen:raise HTTPException(409,"Version snapshot lineage contains a cycle or invalid hash.")
   seen.add(digest);chain.append(cursor)
   predecessor_hash=cursor.get("predecessor_snapshot_hash")
+  if predecessor_hash and predecessor_hash not in by_hash:raise HTTPException(409,"Predecessor version snapshot is missing from tenant evidence.")
   cursor=by_hash.get(predecessor_hash) if predecessor_hash else None
  system_ids={item.get("system_id") for item in chain}
  system_ids.add(record.system_id)
