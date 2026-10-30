@@ -14,6 +14,7 @@ from app.models.core import AISystem, ScenarioCase, HumanReview, Severity, Deter
 from app.services.evaluator import run_trial
 from app.services.release_gate import decide_release, ReleaseThresholds
 from app.services.attestation import create_release_bundle, verify_release_bundle
+from app.services.release_governance import create_version_snapshot, assess_release_path, build_release_interoperability_payload
 app=FastAPI(title="Mubayyin Release Assurance API",description="Vendor-neutral AI release-assurance engine — GCC beachhead.",version="0.2.0")
 @app.middleware("http")
 async def prevent_sensitive_response_caching(request:Request,call_next):
@@ -32,6 +33,13 @@ class RunTrialRequest(BaseModel): system_id:str=Field(min_length=1,max_length=80
 class HumanReviewRequest(BaseModel): reviewer:str;agrees_with_automation:bool;override_severity:Optional[str]=None;comment:str=""
 class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1";required_scenario_ids:list[str]=Field(default_factory=list)
 class TenantCreateRequest(BaseModel): name:str=Field(min_length=2,max_length=160)
+class VersionSnapshotRequest(BaseModel):
+ change_manifest:list[dict]=Field(min_length=1,max_length=40)
+ predecessor_snapshot_id:Optional[str]=Field(default=None,max_length=100)
+class RiskAssessmentRequest(BaseModel):
+ snapshot_id:str=Field(min_length=1,max_length=100)
+ policy_version:str=Field(default="risk-policy.v1",min_length=1,max_length=80)
+ human_authorization_required_by_policy:bool=False
 DATABASE_URL=os.getenv("DATABASE_URL","");PARTNER_ADMIN_TOKEN=os.getenv("PARTNER_ADMIN_TOKEN","");TENANT_ADMIN_TOKEN=os.getenv("MUBAYYIN_TENANT_ADMIN_TOKEN","");_db_engine=None;_database_ready=False;_database_error=None
 def _prune_expired_sandbox_sessions():
  global _last_session_prune
@@ -337,6 +345,76 @@ def tenant_create_release(req:DecideReleaseRequest,authorization:Optional[str]=H
  record=decide_release(system,trials,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,previous_hash,req.scenario_set_version,req.required_scenario_ids)
  _tenant_store(tenant_id,"release",record.record_id,system.system_id,record,immutable=True)
  payload=record.to_dict();payload["persistence"]="durable";payload["tenant_id"]=tenant_id
+ return payload
+
+
+@app.post("/tenant/systems/{system_id}/version-snapshots",status_code=201)
+def tenant_create_version_snapshot(system_id:str,req:VersionSnapshotRequest,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ system=_tenant_get(tenant_id,"system",system_id)
+ if not system:raise HTTPException(404,"Tenant system not found.")
+ predecessor=None
+ if req.predecessor_snapshot_id:
+  predecessor=_tenant_get(tenant_id,"system_version_snapshot",req.predecessor_snapshot_id)
+  if not predecessor:raise HTTPException(404,"Predecessor snapshot not found for this tenant.")
+  if predecessor.get("system_id")==system_id:raise HTTPException(409,"A predecessor must identify a distinct prior system version.")
+ try:
+  snap=create_version_snapshot(system,req.change_manifest,predecessor.get("system_id") if predecessor else None,predecessor.get("snapshot_hash") if predecessor else None)
+ except ValueError as exc:raise HTTPException(422,str(exc))
+ payload=snap.to_dict();snapshot_id="snp_"+snap.snapshot_hash[:24];payload["snapshot_id"]=snapshot_id
+ _tenant_store(tenant_id,"system_version_snapshot",snapshot_id,system_id,payload,immutable=True)
+ return payload
+
+@app.get("/tenant/systems/{system_id}/version-snapshots")
+def tenant_list_version_snapshots(system_id:str,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ if not _tenant_get(tenant_id,"system",system_id):raise HTTPException(404,"Tenant system not found.")
+ return {"system_id":system_id,"snapshots":[item for _,_,item in _tenant_list(tenant_id,"system_version_snapshot",system_id)]}
+
+@app.post("/tenant/releases/{record_id}/risk-assessment",status_code=201)
+def tenant_assess_release_path(record_id:str,req:RiskAssessmentRequest,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ record=_tenant_get(tenant_id,"release",record_id)
+ if not record:raise HTTPException(404,"Tenant Release Record not found.")
+ snapshot=_tenant_get(tenant_id,"system_version_snapshot",req.snapshot_id)
+ if not snapshot or snapshot.get("system_id")!=record.system_id:raise HTTPException(404,"System version snapshot not found for this Release Record.")
+ trials=[_tenant_get(tenant_id,"trial",trial_id) for trial_id in record.trial_result_ids]
+ if any(item is None for item in trials):raise HTTPException(409,"Release Record references missing trial evidence.")
+ mandatory_checks_passed=bool(trials) and all(all(check.passed for check in trial.deterministic_checks) and bool(trial.deterministic_checks) for trial in trials)
+ evidence_complete=not record.missing_scenario_ids and bool(record.trial_result_ids) and set(record.required_scenario_ids).issubset({trial.scenario_id for trial in trials})
+ try:
+  result=assess_release_path(system_id=record.system_id,snapshot_hash=snapshot["snapshot_hash"],manifest=snapshot["change_manifest"],base_release_status=record.status.value,critical_failures=record.critical_failures,major_failures=record.major_failures,evidence_complete=evidence_complete,mandatory_checks_passed=mandatory_checks_passed,policy_version=req.policy_version,human_authorization_required_by_policy=req.human_authorization_required_by_policy)
+ except ValueError as exc:raise HTTPException(422,str(exc))
+ payload=result.to_dict();payload["release_record_id"]=record_id;payload["snapshot_id"]=req.snapshot_id
+ _tenant_store(tenant_id,"risk_assessment",record_id,record.system_id,payload,immutable=True)
+ return payload
+
+@app.get("/tenant/releases/{record_id}/risk-assessment")
+def tenant_get_release_risk_assessment(record_id:str,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ payload=_tenant_get(tenant_id,"risk_assessment",record_id)
+ if not payload:raise HTTPException(404,"Risk assessment not found for this tenant release.")
+ return payload
+
+@app.get("/tenant/releases/{record_id}/continuity")
+def tenant_release_continuity(record_id:str,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ record=_tenant_get(tenant_id,"release",record_id)
+ if not record:raise HTTPException(404,"Tenant Release Record not found.")
+ releases=[item for _,_,item in _tenant_list(tenant_id,"release",record.system_id)]
+ snapshots=[item for _,_,item in _tenant_list(tenant_id,"system_version_snapshot",record.system_id)]
+ return {"schema_version":"mubayyin.release-continuity.v1","system_id":record.system_id,"current_record_id":record_id,"release_records":[item.to_dict() for item in releases],"version_snapshots":snapshots,"previous_record_hash":record.previous_record_hash,"continuity_count":len(releases)}
+
+@app.get("/tenant/integrations/releases/{record_id}")
+def tenant_release_interoperability(record_id:str,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ record=_tenant_get(tenant_id,"release",record_id)
+ if not record:raise HTTPException(404,"Tenant Release Record not found.")
+ snapshots=[item for _,_,item in _tenant_list(tenant_id,"system_version_snapshot",record.system_id)]
+ risk=_tenant_get(tenant_id,"risk_assessment",record_id)
+ continuity={"schema_version":"mubayyin.release-continuity.v1","system_id":record.system_id,"current_record_id":record_id,"previous_record_hash":record.previous_record_hash,"continuity_count":len(_tenant_list(tenant_id,"release",record.system_id)),"version_snapshots":snapshots}
+ payload=build_release_interoperability_payload(record.to_dict(),snapshots[-1] if snapshots else None,continuity,risk)
+ payload["tenant_id"]=tenant_id
  return payload
 
 @app.get("/tenant/releases/{record_id}")
