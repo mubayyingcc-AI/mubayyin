@@ -1,12 +1,4 @@
-# Mubayyin — Release Assurance Engine (v0.1 scaffold)
-
-## Current engineering status (draft branch)
-- Release creation can require an explicit list of scenario IDs. If any required scenario has not been tested, the record is held with a machine-readable `REQUIRED_SCENARIO_COVERAGE_INCOMPLETE` reason and lists missing scenarios.
-- Scenario definitions are immutable once referenced by trial evidence. Create a new `scenario_id` when inputs or policy expectations change so historical evidence remains interpretable.
-- Trials are bound to the AI system configuration hash and scenario configuration hash. Release creation rejects missing/duplicate result IDs, cross-system evidence, changed system configurations, and stale scenario fingerprints.
-- These are evidence-integrity controls, not proof that the evaluator understands responses semantically, that every relevant risk is covered, or that a release is compliant or safe.
-- This branch is a draft pull request and has not been merged into production. Do not treat these controls as live until reviewed, merged, deployed, and verified against the deployed service.
-
+# Mubayyin — Release Assurance Lab (pre-production)
 
 This is the smallest real version of the loop in the strategy doc:
 
@@ -14,16 +6,15 @@ This is the smallest real version of the loop in the strategy doc:
 AISystem  →  ScenarioCase[]  →  TrialResult[]  →  ReleaseRecord
 ```
 
-## What's actually verified (run this first)
+## Automated checks
 
 ```bash
-python3 demo.py          # end-to-end run, prints a real Release Record
-python3 -m unittest tests.test_engine -v   # 13 tests, all passing
+python3 demo.py
+pip install -r requirements.txt
+python3 -m unittest discover -s tests -v
 ```
 
-Both use **zero external dependencies** — pure Python 3 standard library —
-so they run anywhere with no setup. This is the part of the project I could
-fully test and prove works in this environment.
+The demo and core engine use Python's standard library; the HTTP API and full test suite require the packages in `requirements.txt`. GitHub Actions runs the engine/API/public-website tests and a demo end-to-end smoke test. Passing automated tests does not establish production readiness or validate semantic Arabic quality.
 
 What the demo proves:
 - A privacy leak and an unauthorized transfer are caught by **deterministic
@@ -36,7 +27,7 @@ What the demo proves:
 - Every record carries a `config_hash` (exactly what was tested) and an
   `evidence_hash` (what the result was), so it's reproducible.
 
-## What needs you to run it locally (not testable in the build sandbox — no network there)
+## Run locally for a manual integration check
 
 ```bash
 pip install -r requirements.txt
@@ -44,24 +35,31 @@ uvicorn app.api:app --reload
 # open http://127.0.0.1:8000/docs
 ```
 
-This wraps the same, already-tested `app/models` and `app/services` code in
-a real HTTP API (`/systems`, `/scenarios`, `/trials`, `/trials/{id}/review`,
-`/releases`). It uses standard, well-established FastAPI patterns, but I
-could not execute it myself in this sandbox because it has no network
-access to `pip install` — so treat it as "should work, verify on your
-machine," not "proven," until you've run it.
+This wraps the tested `app/models` and `app/services` code in a FastAPI API. The public sandbox uses a session-scoped cookie and keeps test artifacts in memory only; submitted test text is not persisted. A separate invited-pilot `/tenant/*` API now supports bearer-key authentication, tenant-scoped PostgreSQL evidence, immutable Release Records, human review, key rotation/revocation and durable evidence export. Tenant keys are stored as SHA-256 hashes. PostgreSQL is also used for consented partnership enquiries and opt-in anonymous usage events. The private tenant API still requires a real Railway create → restart → retrieve test before its durability is advertised as production-verified.
 
-## What is deliberately NOT built yet (and why)
+Private pilot API, browser workspace (`/workspace`) and security limits: [docs/private-tenant-workspace.md](docs/private-tenant-workspace.md).
 
-Per the strategy doc's validation gates — none of this should be built
-before you have paying pilots and a changed production decision:
+## Portable Release Record export and verification
 
-- PostgreSQL-backed evidence storage is implemented in the API when DATABASE_URL is configured. It persists systems, scenarios, trials, reviews, and release records and restores them at startup. A live database-backed restart/restore test is still required before claiming end-to-end durability has been verified.
+The English and Arabic labs can export a sandbox Release Record as a JSON evidence bundle, including referenced scenario definitions and trial outputs/findings. The canonical SHA-256 payload hash covers both the record and included evidence; optional HMAC-SHA256 signing is available when `MUBAYYIN_ATTESTATION_KEY` is configured.
+
+- API export: `GET /releases/{record_id}/export` (owning sandbox session only)
+- API verification: `POST /releases/verify`
+- Offline verifier: `python scripts/verify_release_bundle.py <bundle.json>`
+- Details and interpretation limits: [docs/release-record-bundle.md](docs/release-record-bundle.md)
+
+An unsigned hash can detect changes to the record and exported evidence but does not authenticate who created the bundle. HMAC is a shared-secret mechanism, not a public-key signature. A valid bundle does not certify AI safety or compliance, and the public sandbox's underlying evidence remains ephemeral.
+
+## Remaining gaps (deliberately staged)
+
+The tenant API is an initial controlled-pilot surface, not a finished enterprise identity product. The following still require validation, security review, or paying pilot evidence:
+
+- Real Railway/PostgreSQL create → restart → retrieve verification, tenant-level audit logging, concurrency/transaction review and security testing
 - Real LLM judge (currently a transparent lexical-overlap stand-in in
   `app/services/evaluator.py::reference_judge` — replace with an actual
   model call behind the same `JudgeFn` signature, and add a second,
   independent judge before trusting disagreement checks)
-- Authentication and tenant isolation, CI/CD webhooks, drift watch, SDKs
+- User-level roles, SSO/MFA, fine-grained reviewer permissions, rate limiting, a production-hardened private workspace UI, CI/CD webhooks, drift watch and SDKs
 - Any of the "10 organizations use this scenario library" scale — this
   scaffold ships with 10 illustrative scenarios, not a production library
 
