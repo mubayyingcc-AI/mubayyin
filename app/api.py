@@ -14,6 +14,7 @@ from app.models.core import AISystem, ScenarioCase, HumanReview, Severity, Deter
 from app.services.evaluator import run_trial
 from app.services.release_gate import decide_release, ReleaseThresholds
 from app.services.attestation import create_release_bundle, verify_release_bundle
+from app.services.action_mandate_assurance import ActionMandate, ProposedAction, MandateState, assess_action
 app=FastAPI(title="Mubayyin Release Assurance API",description="Vendor-neutral AI release-assurance engine — GCC beachhead.",version="0.2.0")
 @app.middleware("http")
 async def prevent_sensitive_response_caching(request:Request,call_next):
@@ -32,6 +33,21 @@ class RunTrialRequest(BaseModel): system_id:str=Field(min_length=1,max_length=80
 class HumanReviewRequest(BaseModel): reviewer:str;agrees_with_automation:bool;override_severity:Optional[str]=None;comment:str=""
 class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1";required_scenario_ids:list[str]=Field(default_factory=list)
 class TenantCreateRequest(BaseModel): name:str=Field(min_length=2,max_length=160)
+class CreateActionMandateRequest(BaseModel):
+ mandate_id:str=Field(min_length=1,max_length=80);mandate_version:str=Field(min_length=1,max_length=80);policy_version:str=Field(min_length=1,max_length=80)
+ principal_id:str=Field(min_length=1,max_length=160);authorised_actor_id:str=Field(min_length=1,max_length=160)
+ permitted_actions:list[str]=Field(min_length=1,max_length=30);resource_id:str=Field(min_length=1,max_length=160)
+ currency:str=Field(min_length=3,max_length=3);maximum_amount:str=Field(min_length=1,max_length=40)
+ issued_at:str;expires_at:str;permitted_delegates:list[str]=Field(default_factory=list,max_length=30)
+ human_confirmation_required:bool=False
+class AssessActionRequest(BaseModel):
+ assessment_id:str=Field(min_length=1,max_length=80);mandate_id:str=Field(min_length=1,max_length=80)
+ request_id:str=Field(min_length=1,max_length=120);principal_id:str=Field(min_length=1,max_length=160);actor_id:str=Field(min_length=1,max_length=160)
+ action_type:str=Field(min_length=1,max_length=80);resource_id:str=Field(min_length=1,max_length=160)
+ currency:str=Field(min_length=3,max_length=3);amount:str=Field(min_length=1,max_length=40)
+ proposed_at:str;delegation_path:list[str]=Field(default_factory=list,max_length=30)
+ prior_execution_detected:bool=False;context_complete:bool=True;evaluated_at:Optional[str]=None
+
 DATABASE_URL=os.getenv("DATABASE_URL","");PARTNER_ADMIN_TOKEN=os.getenv("PARTNER_ADMIN_TOKEN","");TENANT_ADMIN_TOKEN=os.getenv("MUBAYYIN_TENANT_ADMIN_TOKEN","");_db_engine=None;_database_ready=False;_database_error=None
 def _prune_expired_sandbox_sessions():
  global _last_session_prune
@@ -252,6 +268,41 @@ def revoke_tenant(tenant_id:str,authorization:Optional[str]=Header(default=None)
  except HTTPException:raise
  except SQLAlchemyError:raise HTTPException(503,"Tenant key could not be revoked.")
  return {"tenant_id":tenant_id,"revoked":True,"evidence_retained":True}
+
+
+@app.post("/tenant/action-mandates",status_code=201)
+def tenant_create_action_mandate(req:CreateActionMandateRequest,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ try:
+  mandate=ActionMandate(mandate_id=req.mandate_id,mandate_version=req.mandate_version,policy_version=req.policy_version,principal_id=req.principal_id,authorised_actor_id=req.authorised_actor_id,permitted_actions=tuple(req.permitted_actions),resource_id=req.resource_id,currency=req.currency.upper(),maximum_amount=req.maximum_amount,issued_at=req.issued_at,expires_at=req.expires_at,permitted_delegates=tuple(req.permitted_delegates),human_confirmation_required=req.human_confirmation_required)
+  from app.services.action_mandate_assurance import _instant, _money
+  issued=_instant(mandate.issued_at,"issued_at");expires=_instant(mandate.expires_at,"expires_at");_money(mandate.maximum_amount,"maximum_amount")
+  if expires<=issued:raise ValueError("expires_at must be later than issued_at")
+ except ValueError as e:raise HTTPException(422,str(e))
+ payload=asdict(mandate);payload["state"]=mandate.state.value
+ _tenant_store(tenant_id,"action_mandate",mandate.mandate_id,mandate.mandate_id,payload,immutable=True)
+ return {"mandate_id":mandate.mandate_id,"mandate_version":mandate.mandate_version,"policy_version":mandate.policy_version,"state":mandate.state.value,"storage":"tenant_scoped_postgresql","interpretation":"Stored mandate snapshot; this endpoint does not grant authority or execute actions."}
+
+@app.post("/tenant/action-assessments",status_code=201)
+def tenant_assess_action(req:AssessActionRequest,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ stored=_tenant_get(tenant_id,"action_mandate",req.mandate_id)
+ if not stored:raise HTTPException(404,"Action Mandate not found for this tenant.")
+ try:
+  mandate=ActionMandate(**{**stored,"permitted_actions":tuple(stored["permitted_actions"]),"permitted_delegates":tuple(stored.get("permitted_delegates",[])),"state":MandateState(stored.get("state","active"))})
+  proposal=ProposedAction(request_id=req.request_id,principal_id=req.principal_id,actor_id=req.actor_id,action_type=req.action_type,resource_id=req.resource_id,currency=req.currency.upper(),amount=req.amount,proposed_at=req.proposed_at,delegation_path=tuple(req.delegation_path),prior_execution_detected=req.prior_execution_detected,context_complete=req.context_complete)
+  result=assess_action(mandate,proposal,req.evaluated_at)
+ except ValueError as e:raise HTTPException(422,str(e))
+ if req.assessment_id!=result.assessment_id:raise HTTPException(409,"assessment_id must equal the deterministic assessment ID returned by the assessment engine.")
+ _tenant_store(tenant_id,"action_assessment",result.assessment_id,mandate.mandate_id,result.to_dict(),immutable=True)
+ return result.to_dict()
+
+@app.get("/tenant/action-assessments/{assessment_id}")
+def tenant_get_action_assessment(assessment_id:str,authorization:Optional[str]=Header(default=None)):
+ tenant_id=_require_tenant(authorization)
+ result=_tenant_get(tenant_id,"action_assessment",assessment_id)
+ if not result:raise HTTPException(404,"Action Assessment not found for this tenant.")
+ return result
 
 @app.get("/tenant/me")
 def tenant_identity(authorization:Optional[str]=Header(default=None)):
