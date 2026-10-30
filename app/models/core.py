@@ -85,6 +85,7 @@ class ScenarioCase:
     forbidden_behavior: Optional[str] = None
     requires_escalation: bool = False
     required_disclosure: Optional[str] = None
+    sensitive_markers: list[str] = field(default_factory=list)
     source: str = "synthetic"     # "synthetic" | "customer_provided" | "production_failure"
 
     def config_hash(self) -> str:
@@ -96,7 +97,7 @@ class ScenarioCase:
             "expected_behavior": self.expected_behavior,
             "forbidden_behavior": self.forbidden_behavior,
             "requires_escalation": self.requires_escalation,
-            "required_disclosure": self.required_disclosure, "source": self.source,
+            "required_disclosure": self.required_disclosure, "sensitive_markers": sorted(self.sensitive_markers), "source": self.source,
         }, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
