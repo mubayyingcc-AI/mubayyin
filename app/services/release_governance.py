@@ -113,7 +113,7 @@ def classify_change_manifest(manifest: Iterable[dict[str, Any]]) -> tuple[str, l
 def assess_release_path(*, system_id: str, snapshot_hash: str, manifest: Iterable[dict[str, Any]], base_release_status: str, critical_failures: int, major_failures: int, evidence_complete: bool, mandatory_checks_passed: bool, policy_version: str = "risk-policy.v1", human_authorization_required_by_policy: bool = False, assessed_at: str | None = None) -> RiskAssessment:
     tier, reasons = classify_change_manifest(manifest)
     release_path, effective = "HOLD_FOR_EVIDENCE", "HOLD_FOR_REPAIR"
-    human_required = human_authorization_required_by_policy
+    human_required = human_authorization_required_by_policy or tier in {"TIER_2", "TIER_3"}
     if not evidence_complete:
         reasons.append("REQUIRED_EVIDENCE_INCOMPLETE")
     elif not mandatory_checks_passed:
