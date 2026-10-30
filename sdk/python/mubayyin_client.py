@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, quote
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 class MubayyinAPIError(RuntimeError):
@@ -96,6 +96,16 @@ class MubayyinClient:
         return self._request("GET", f"/tenant/releases/{record_id}")
     def export_release(self, record_id: str) -> dict[str, Any]:
         return self._request("GET", f"/tenant/releases/{record_id}/export")
+    def create_action_mandate(self, **mandate: Any) -> dict[str, Any]:
+        """Store a tenant-scoped, immutable Action Mandate snapshot."""
+        return self._request("POST", "/tenant/action-mandates", mandate)
+    def revoke_action_mandate(self, mandate_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/tenant/action-mandates/{quote(mandate_id, safe='')}/revoke")
+    def assess_action(self, **proposal: Any) -> dict[str, Any]:
+        """Assess a proposed action; server supplies the evaluation timestamp."""
+        return self._request("POST", "/tenant/action-assessments", proposal)
+    def get_action_assessment(self, assessment_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/tenant/action-assessments/{quote(assessment_id, safe='')}")
     def verify_bundle(self, bundle: Mapping[str, Any]) -> dict[str, Any]:
         """Ask the public verifier to check a downloaded JSON evidence bundle."""
         return self._request("POST", "/releases/verify", bundle)
