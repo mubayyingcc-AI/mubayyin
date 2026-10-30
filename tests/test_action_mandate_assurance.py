@@ -26,6 +26,18 @@ class ActionMandateAssuranceTests(unittest.TestCase):
     def test_revoked_mandate_is_rejected(self):
         m = mandate(state=MandateState.REVOKED, revoked_at="2026-10-29T10:00:00+00:00")
         self.assertEqual(assess_action(m, proposal(), NOW).decision, ActionDecision.REJECTED)
+    def test_mandate_not_yet_issued_is_rejected(self):
+        m = mandate(issued_at="2026-10-31T00:00:00+00:00")
+        result = assess_action(m, proposal(), NOW)
+        self.assertIn("MANDATE_NOT_YET_EFFECTIVE", result.reason_codes)
+        self.assertEqual(result.decision, ActionDecision.REJECTED)
+
+    def test_action_proposed_before_mandate_issuance_is_rejected(self):
+        p = proposal(proposed_at="2026-09-30T23:59:59+00:00")
+        result = assess_action(mandate(), p, NOW)
+        self.assertIn("MANDATE_NOT_YET_EFFECTIVE", result.reason_codes)
+        self.assertEqual(result.decision, ActionDecision.REJECTED)
+
     def test_expired_mandate_is_rejected(self):
         m = mandate(expires_at="2026-10-29T00:00:00+00:00")
         self.assertIn("MANDATE_EXPIRED", assess_action(m, proposal(), NOW).reason_codes)
