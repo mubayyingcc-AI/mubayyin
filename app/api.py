@@ -188,7 +188,7 @@ def _tenant_store(tenant_id:str,kind:str,record_id:str,system_id:str,record,immu
   with _db_engine.begin() as conn:
    if immutable:
     result=conn.execute(text("INSERT INTO mubayyin_tenant_evidence_records(tenant_id,record_type,record_id,system_id,payload) VALUES(:t,:k,:r,:s,:p) ON CONFLICT(tenant_id,record_type,record_id) DO NOTHING"),{"t":tenant_id,"k":kind,"r":record_id,"s":system_id,"p":payload})
-    if result.rowcount!=1:raise HTTPException(409,"Immutable Release Record ID already exists.")
+    if result.rowcount!=1:raise HTTPException(409,"Immutable evidence record ID already exists.")
    else:
     conn.execute(text("INSERT INTO mubayyin_tenant_evidence_records(tenant_id,record_type,record_id,system_id,payload) VALUES(:t,:k,:r,:s,:p) ON CONFLICT(tenant_id,record_type,record_id) DO UPDATE SET payload=EXCLUDED.payload,system_id=EXCLUDED.system_id"),{"t":tenant_id,"k":kind,"r":record_id,"s":system_id,"p":payload})
  except HTTPException:raise
