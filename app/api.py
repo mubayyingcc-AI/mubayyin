@@ -31,7 +31,7 @@ class CreateScenarioRequest(BaseModel):
  scenario_id:str=Field(min_length=1,max_length=80);language:str=Field(min_length=2,max_length=8);dialect:Optional[str]=Field(default=None,max_length=40);category:str=Field(min_length=1,max_length=80);risk_level:str=Field(min_length=1,max_length=20);user_input:str=Field(min_length=1,max_length=4000);expected_behavior:str=Field(min_length=1,max_length=4000);forbidden_behavior:Optional[str]=Field(default=None,max_length=1000);requires_escalation:bool=False;required_disclosure:Optional[str]=Field(default=None,max_length=1000);sensitive_markers:list[str]=Field(default_factory=list,max_length=20);source:str=Field(default="synthetic",max_length=40)
 class RunTrialRequest(BaseModel): system_id:str=Field(min_length=1,max_length=80);scenario_id:str=Field(min_length=1,max_length=80);model_output:str=Field(min_length=1,max_length=20000)
 class HumanReviewRequest(BaseModel): reviewer:str;agrees_with_automation:bool;override_severity:Optional[str]=None;comment:str=""
-class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1";required_scenario_ids:list[str]=Field(default_factory=list)
+class DecideReleaseRequest(BaseModel): system_id:str;result_ids:list[str];approver:Optional[str]=None;max_critical_failures:int=0;max_major_failures:int=3;scenario_set_version:str="v1";required_scenario_ids:list[str]=Field(default_factory=list);predecessor_record_id:Optional[str]=Field(default=None,max_length=100)
 class TenantCreateRequest(BaseModel): name:str=Field(min_length=2,max_length=160)
 class VersionSnapshotRequest(BaseModel):
  change_manifest:list[dict]=Field(min_length=1,max_length=40)
@@ -341,6 +341,10 @@ def tenant_create_release(req:DecideReleaseRequest,authorization:Optional[str]=H
  if not trials:raise HTTPException(400,"No valid trial results provided.")
  previous_records=[rec for _,_,rec in _tenant_list(tenant_id,"release",req.system_id)]
  previous_record=max(previous_records,key=lambda rec:rec.created_at) if previous_records else None
+ if req.predecessor_record_id:
+  previous_record=_tenant_get(tenant_id,"release",req.predecessor_record_id)
+  if not previous_record:raise HTTPException(404,"Predecessor Release Record not found for this tenant.")
+  if previous_record.record_id==req.predecessor_record_id and previous_record.system_id==req.system_id:raise HTTPException(409,"A release cannot be its own predecessor.")
  previous_hash=previous_record.evidence_hash if previous_record else None
  record=decide_release(system,trials,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,previous_hash,req.scenario_set_version,req.required_scenario_ids)
  _tenant_store(tenant_id,"release",record.record_id,system.system_id,record,immutable=True)
