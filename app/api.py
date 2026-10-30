@@ -344,7 +344,6 @@ def tenant_create_release(req:DecideReleaseRequest,authorization:Optional[str]=H
  if req.predecessor_record_id:
   previous_record=_tenant_get(tenant_id,"release",req.predecessor_record_id)
   if not previous_record:raise HTTPException(404,"Predecessor Release Record not found for this tenant.")
-  if previous_record.record_id==req.predecessor_record_id and previous_record.system_id==req.system_id:raise HTTPException(409,"A release cannot be its own predecessor.")
  previous_hash=previous_record.evidence_hash if previous_record else None
  record=decide_release(system,trials,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,previous_hash,req.scenario_set_version,req.required_scenario_ids)
  _tenant_store(tenant_id,"release",record.record_id,system.system_id,record,immutable=True)
