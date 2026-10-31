@@ -518,6 +518,10 @@ def create_partner(req:PartnerEnquiryRequest):
  return {"accepted":True,"enquiry_id":eid,"message":"Your partnership enquiry was saved."}
 @app.get("/partner-inbox",include_in_schema=False)
 def inbox():return FileResponse(Path(__file__).parent/"static"/"partner-inbox.html",media_type="text/html")
+
+@app.get("/brand-logo",include_in_schema=False)
+def brand_logo():
+ return FileResponse(Path(__file__).parent/"static"/"mubayyin-brand.jpg",media_type="image/jpeg",headers={"Cache-Control":"public, max-age=86400"})
 @app.get("/partnership/enquiries")
 def list_partners(authorization:Optional[str]=Header(default=None),limit:int=Query(default=50,ge=1,le=200)):
  if not PARTNER_ADMIN_TOKEN:raise HTTPException(503,"Partner inbox access is not configured.")

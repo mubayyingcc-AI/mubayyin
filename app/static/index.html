@@ -33,13 +33,20 @@
 @media(max-width:850px){.nav{padding:0 14px;height:auto;min-height:66px;align-items:flex-start;flex-direction:column;gap:6px}.navlinks{width:100%;overflow-x:auto;padding:7px 0 10px;gap:15px}.navlinks>a,.nav-dropdown summary{font-size:11px!important}.navlinks a:not(.btn){display:inline-flex}.hero{padding-top:145px;min-height:auto}.qatar-program{grid-template-columns:1fr}.product-grid,.city-grid,.path-grid{grid-template-columns:1fr 1fr}.readiness-grid{grid-template-columns:1fr 1fr}.qatar-banner .wrap{align-items:flex-start;flex-direction:column;gap:3px}}
 @media(max-width:520px){.product-grid,.city-grid,.path-grid,.readiness-grid{grid-template-columns:1fr}.hero{padding-top:155px}.hero-shell{background-position:58% center}.city-card{min-height:170px}}
 
+
+/* Mubayyin identity system */
+.brand{gap:0}.brand-logo{display:block;width:86px;height:61px;object-fit:contain;border-radius:8px}
+.brand-signature{background:#061625;padding:24px 0;text-align:center;border-top:1px solid #12344a;border-bottom:1px solid #12344a}
+.brand-signature img{display:block;width:min(260px,62vw);height:auto;max-height:184px;object-fit:contain;margin:0 auto;filter:drop-shadow(0 10px 26px #00c9cf20)}
+.footer-brand{display:flex;align-items:center;gap:13px}.footer-brand img{width:116px;height:82px;object-fit:contain;border-radius:7px}
+@media(max-width:850px){.brand-logo{width:72px;height:51px}.brand-signature{padding:18px 0}.footer-brand img{width:94px;height:67px}}
 </style>
 </head>
 <body>
 <header class="hero-shell">
  <div class="wrap">
   <nav class="nav">
-   <a class="brand" href="#" aria-label="Mubayyin home"><span class="mark">م</span><span>Mubayyin</span></a>
+   <a class="brand" href="#" aria-label="Mubayyin home"><img class="brand-logo" src="/brand-logo" alt="Mubayyin AI Release Assurance"></a>
    <div class="navlinks">
     <details class="nav-dropdown"><summary>Products <span>⌄</span></summary><div class="nav-menu"><a href="#products">Product suite</a><a href="#approach">Assurance method</a><a href="#test-lab">Live Test Lab</a><a href="#evidence">Evidence model</a><a href="/workspace">Invited pilot workspace</a></div></details>
     <a href="#approach">Approach</a><a href="#test-lab">Test Lab</a><a href="#test-lab">Live Demo</a><a href="#evidence">Evidence</a><a href="#qatar">Qatar</a><a href="#integrations">Incubators</a><a href="#partnership-designer">Partnerships</a>
@@ -68,7 +75,7 @@
  </div>
 </header>
 <div class="qatar-banner"><div class="wrap"><strong>Built with Qatar as the launch market</strong><span>Local partnerships · AI assurance capability · GCC expansion pathway</span></div></div>
-<main>
+<div class="brand-signature" aria-label="Mubayyin brand identity"><img src="/brand-logo" alt="Mubayyin — Making AI readiness visible, verified, and decision-ready"></div>\n<main>
 <section class="section section-dark" id="qatar">
  <div class="wrap">
   <div class="qatar-program">
@@ -255,7 +262,7 @@
 </section>
 <section class="bottom-cta"><div class="wrap cta-inner"><div><h2>Test locally. Prove clearly.</h2><p>Start with one response. Expand only when the evidence earns it.</p></div><a class="btn btn-primary" href="#test-lab">Open the free test lab ↗</a></div></section>
 </main>
-<footer class="footer"><div class="wrap footer-inner"><div><strong>Mubayyin</strong> · Qatar-first AI Release Assurance · Early access build</div><div class="footer-links"><a href="#products">Products</a><a href="#approach">Method</a><a href="#test-lab">Test lab</a><a href="#evidence">Evidence</a><a href="#partnership-designer">Partnerships</a><a href="/docs">API docs</a><a href="/health">System health</a><a href="/workspace">Pilot workspace</a><a href="/partner-inbox">Console</a></div></div></footer>
+<footer class="footer"><div class="wrap footer-inner"><div class="footer-brand"><img src="/brand-logo" alt="Mubayyin logo"><span><strong>Mubayyin</strong><br>Qatar-first AI Release Assurance · Early access build</span></div><div class="footer-links"><a href="#products">Products</a><a href="#approach">Method</a><a href="#test-lab">Test lab</a><a href="#evidence">Evidence</a><a href="#partnership-designer">Partnerships</a><a href="/docs">API docs</a><a href="/health">System health</a><a href="/workspace">Pilot workspace</a><a href="/partner-inbox">Console</a></div></div></footer>
 <div class="toast" id="toast" role="status"></div>
 <script>
 const $=id=>document.getElementById(id);
