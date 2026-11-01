@@ -19,7 +19,6 @@ class AssuranceAssessmentRequest(BaseModel):
     language_context: str = Field(default="ar-en", max_length=40)
     baseline_run: Optional[dict] = None
     candidate_run: Optional[dict] = None
-    evidence_bundle_complete: bool = False
     require_human_approval: bool = False
     scenario_set_version: str = Field(default="unversioned", max_length=80)
 
@@ -42,7 +41,7 @@ def create_assessment(req: AssuranceAssessmentRequest, authorization: Optional[s
         output=req.output, required_terms=req.required_terms,
         prohibited_terms=req.prohibited_terms, required_values=req.required_values,
         language_context=req.language_context, baseline_run=req.baseline_run,
-        candidate_run=req.candidate_run, evidence_complete=req.evidence_bundle_complete,
+        candidate_run=req.candidate_run, evidence_complete=False,
         require_human_approval=req.require_human_approval,
         system_snapshot_hash=snapshot_hash,
         scenario_set_version=req.scenario_set_version,
