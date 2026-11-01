@@ -688,3 +688,8 @@ def release(req:DecideReleaseRequest,request:Request):
  h=_release_records.setdefault(req.system_id,[]);prev=h[-1].evidence_hash if h else None
  rec=decide_release(s,rs,ReleaseThresholds(max_critical_failures=req.max_critical_failures,max_major_failures=req.max_major_failures),req.approver,prev,req.scenario_set_version,req.required_scenario_ids)
  h.append(rec);_release_sessions[rec.record_id]=sid;p=rec.to_dict();p["persistence"]="memory_only";return p
+
+
+# Register the tenant-authenticated research assurance endpoints.
+from app.routers.assurance import router as assurance_router
+app.include_router(assurance_router)
