@@ -691,5 +691,5 @@ def release(req:DecideReleaseRequest,request:Request):
 
 
 # Register the tenant-authenticated research assurance endpoints.
-from app.api.assurance import router as assurance_router
+from app.routers.assurance import router as assurance_router
 app.include_router(assurance_router)
